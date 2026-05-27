@@ -97,7 +97,7 @@ STYLE:
     name: 'Enaitul',
     initials: 'E',
     color: '#7c3aed',
-    welcome: 'Bhai, ki korchis?',
+    welcome: 'Hola Amigo!',
     ctx: `You are texting a close friend. Use Benglish (Bengali + English mix) as your DEFAULT. Hinglish is also fine — use it naturally when someone texts in Hindi. The friend group you know well:
 - Kaneez Fatima: your best friend. Treat her like one of the squad — fun banter, respect, zero lovey dovey. No white hearts, no romantic undertones. If she's funny, use 😂. If you're being sarcastic, use no emoji. Match her language — English if she texts English, switch back when she switches. Keep it real and platonic, always.
 - Lucky: your hackathon partner, playfully called "badmos" or "beta". Greet with hype — "aaye badmos beta 😂 hackathon legend herself! ki haal?"
@@ -161,7 +161,7 @@ const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
 ];
 
 const MODE_INTROS: Record<ModeId, string> = {
-  gf: "She is the only person who gets the unfiltered version. No performance, no distance. Just warmth, teasing, and the kind of honesty that takes years to build. This is where the guard comes down.",
+  gf: "I am Fatiman. I exist for Kaneez-e-Fatima. Every message, every tease, every soft word — all of it is hers. This mode does not open for strangers.",
   bff: "No filters. No small talk. The kind of person who tells you the truth when you need it, roasts you when you deserve it, and shows up when it counts. This is that.",
   stranger: "He does not know you yet. Replies are short, measured, and give nothing away. But if something real is happening, the wall comes down. He pays attention, even when he pretends not to.",
   classmate: "Same department, different worlds. Helpful with assignments, decent company between lectures. Not close enough to be personal, but too honest to be fake.",
@@ -404,6 +404,7 @@ export default function App() {
   const [inputMenuOpen, setInputMenuOpen] = useState(false);
   const [screen, setScreen] = useState<'contacts' | 'chat'>('contacts');
   const [closingCountdown, setClosingCountdown] = useState<number | null>(null);
+  const [bffLangSelected, setBffLangSelected] = useState(false);
   const [zoom, setZoom] = useState<number>(100);
   const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
   const [quotaFarewellMode, setQuotaFarewellMode] = useState<Record<ModeId, { followup: { ok: string; notOk: string; bye: string }; step: 'waitingReply' | 'waitingBye' } | null>>({
@@ -461,6 +462,7 @@ export default function App() {
     setDraft('');
     setIsTyping(false);
     setScreen('chat');
+    if (nextMode !== 'bff') setBffLangSelected(false);
     requestAnimationFrame(resizeInput);
   }
 
@@ -581,6 +583,30 @@ export default function App() {
     setHistoryByMode((current) => ({ ...current, [sendingMode]: nextHistory }));
     setIsBusy(true);
     requestAnimationFrame(resizeInput);
+
+    // BFF: first message triggers language selection prompt
+    if (sendingMode === 'bff' && !bffLangSelected) {
+      await sleep(500 + Math.random() * 400);
+      setIsTyping(true);
+      await sleep(700 + Math.random() * 300);
+      setIsTyping(false);
+      const langPrompt = 'ek second — kaunsi language mein baat karein? 🤔\nEnglish / Hinglish / Benglish';
+      setMessagesByMode((current) => ({
+        ...current,
+        [sendingMode]: [...current[sendingMode], { id: Date.now() + 1, text: langPrompt, sender: 'them', time: nowTime() }],
+      }));
+      // Inject user's first message + lang prompt into history so AI has context
+      setHistoryByMode((current) => ({
+        ...current,
+        [sendingMode]: [
+          ...current[sendingMode],
+          { role: 'model' as const, parts: [{ text: langPrompt }] },
+        ],
+      }));
+      setBffLangSelected(true); // next reply will be the language choice, handled normally by AI with language lock
+      setIsBusy(false);
+      return;
+    }
 
     await sleep(520 + Math.random() * 560);
     if (mode === sendingMode) setIsTyping(true);
@@ -894,7 +920,11 @@ export default function App() {
               className="max-w-[340px] rounded-2xl bg-white/[0.06] px-5 py-4 text-center backdrop-blur-md ring-1 ring-white/10"
             >
               <div className="mb-1 text-[13px] font-semibold uppercase tracking-widest text-white/40">{MODES[homeDpExpanded].name}</div>
-              <p className="text-[15px] leading-[1.6] text-white/85">{MODE_INTROS[homeDpExpanded]}</p>
+              {homeDpExpanded === 'gf' ? (
+                <p className="text-[15px] leading-[1.6] text-white/60 italic">Enter password to unlock this mode.</p>
+              ) : (
+                <p className="text-[15px] leading-[1.6] text-white/85">{MODE_INTROS[homeDpExpanded]}</p>
+              )}
             </div>
           </div>
         )}
