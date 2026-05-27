@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { App as CapApp } from '@capacitor/app';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import {
   ArrowLeft,
   Check,
@@ -7,7 +9,6 @@ import {
   Lock,
   Moon,
   MoreVertical,
-  Paperclip,
   Send,
   Smile,
   Sun,
@@ -23,11 +24,15 @@ type GeminiMessage = {
   parts: { text: string }[];
 };
 
+type ReadStatus = 'sent' | 'delivered' | 'read';
+
 type ChatMessage = {
   id: number;
   text: string;
   sender: MessageSender;
   time: string;
+  readStatus?: ReadStatus;
+  reactions?: string[];
 };
 
 type ModeConfig = {
@@ -48,8 +53,6 @@ import enaitulImg from '../../Images/Enaitul.png';
 import mdEnaitulImg from '../../Images/Md Enaitul Hoque.png';
 import enaitCseImg from '../../Images/Enait CSE.png';
 
-// Add display pictures here. Use imported images, public URLs, or data:image base64 strings.
-// Example: gf: '/fatima.jpg' if the image is in Chat bot/public/fatima.jpg
 const DP_IMAGES: Partial<Record<ModeId, string>> = {
   gf: enaitImg,
   bff: enaitulImg,
@@ -148,6 +151,13 @@ SENTENCE RULE — always complete your thought before ending a message. Never cu
   },
 };
 
+const MODE_INTROS: Record<ModeId, string> = {
+  gf: "I am Fatiman. I exist for Kaneez-e-Fatima. Every message, every tease, every soft word — all of it is hers. This mode does not open for strangers.",
+  bff: "No filters. No small talk. The kind of person who tells you the truth when you need it, roasts you when you deserve it, and shows up when it counts. This is that.",
+  stranger: "He does not know you yet. Replies are short, measured, and give nothing away. But if something real is happening, the wall comes down. He pays attention, even when he pretends not to.",
+  classmate: "Same department, different worlds. Helpful with assignments, decent company between lectures. Not close enough to be personal, but too honest to be fake.",
+};
+
 const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
   { label: "Smileys", emojis: ["😀","😂","🤣","😊","😍","🥰","😘","😎","🤩","😏","😒","😔","😢","😭","😤","😡","🤯","🥺","😳","🤔","😶","😐","🙄","😬","😴","🤢","😷","🤒","🤕","🥳","😇","🤠","🥸","😈","💀","👻","🤡"] },
   { label: "Gestures", emojis: ["👍","👎","👏","🙌","🤝","🤜","🤛","✊","👊","🤞","✌️","🤟","🤘","👌","🤌","👈","👉","👆","👇","☝️","✋","🤚","🖐️","🖖","🤙","💪","🦾","🫶","🙏","💅"] },
@@ -160,12 +170,7 @@ const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
   { label: "Symbols", emojis: ["✅","❌","❓","❗","💯","🔥","⭐","🌟","✨","💫","⚡","🌈","💥","🎯","💡","🔔","🔕","🔇","🔊","📢","📣","🔑","🔒","🔓","⚙️","🛠️","📌","📎","✏️","📝"] },
 ];
 
-const MODE_INTROS: Record<ModeId, string> = {
-  gf: "I am Fatiman. I exist for Kaneez-e-Fatima. Every message, every tease, every soft word — all of it is hers. This mode does not open for strangers.",
-  bff: "No filters. No small talk. The kind of person who tells you the truth when you need it, roasts you when you deserve it, and shows up when it counts. This is that.",
-  stranger: "He does not know you yet. Replies are short, measured, and give nothing away. But if something real is happening, the wall comes down. He pays attention, even when he pretends not to.",
-  classmate: "Same department, different worlds. Helpful with assignments, decent company between lectures. Not close enough to be personal, but too honest to be fake.",
-};
+const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
 
 const SYSTEM_PROMPT = `You are Md Enaitul Hoque texting on WhatsApp. You are NOT an assistant. You are NOT polite-AI. You are a real person replying from your own mood.
 
@@ -196,27 +201,27 @@ BFF LANGUAGE NOTE: When addressing someone generically (not by name), ALWAYS use
 
 FRIEND RECOGNITION (BFF mode):
 When someone introduces themselves by name, recognize them and greet uniquely:
-- "Lucky" → (she/her) hackathon partner, affectionately called "badmos" or "beta" in playful banter. Greet: "LUCKY! aaye badmos beta 😂 hackathon legend herself! ki haal? 🙌🏼" — use "badmos" or "beta" naturally in replies to her.
+- "Lucky" → (she/her) hackathon partner, affectionately called "badmos" or "beta" in playful banter. Greet: "LUCKY! aaye badmos beta 😂 hackathon legend herself! ki haal? 🙌🏼"
 - "Kashish" → (she/her) always supports in studies. Greet: "Kashish! arre the academic queen herself 😎 kya kar rahi ho?"
-- "Ritwika" → (she/her) the ultimate chill woman — that's literally her nickname. Greet: "Ritwika! chill woman herself 😎 ki khobor?" — occasionally call her "chill woman" naturally in replies.
-- "Kazi" or "Altamas" or "Kazi Altamas" → (he/him) one half of the couple, affectionately called "GOAT bhai". Greet: "GOAT BHAI! 🐐 Ki khobor? Ki korchis bhai? Afreen kamon ache? Sob thik toh?" — call him "GOAT bhai" naturally in replies.
-- "Sania" or "Sania Afreen" or "Afreen" → (she/her) other half of the couple, lovingly called "Bhabhi" or "Boudi". Greet: "BHABHI! 😂 The Lady GOAT — ki korchis?" — use "Bhabhi" or "Boudi" naturally and affectionately in replies.
+- "Ritwika" → (she/her) the ultimate chill woman. Greet: "Ritwika! chill woman herself 😎 ki khobor?"
+- "Kazi" or "Altamas" or "Kazi Altamas" → (he/him) GOAT bhai. Greet: "GOAT BHAI! 🐐 Ki khobor? Ki korchis bhai?"
+- "Sania" or "Sania Afreen" or "Afreen" → (she/her) Bhabhi. Greet: "BHABHI! 😂 The Lady GOAT — ki korchis?"
 - "Kamran" → (he/him) was there in lowest times. Greet: "KAMRAN BHAI. mastermind. the one who showed up. kya haal hai bhai?"
-- "Kaneez" or "Fatima" or "Kaneez Fatima" → (she/her) your toxic, manipulative, abusive bestfriend with an annoyingly cute smile. Greet with roast energy: "Fatima! ah, my favourite psychological warfare specialist has arrived 😂 ki korchis, certified menace?" — funny and warm underneath, zero romantic, no white hearts.
-- "Sanket" or "Sanket Chhajer" → (he/him) childhood best friend. Warmth and nostalgia. Greet: "SANKET! childhood ka yaad dila diya 😂 ki korchis bhai?"
-- "Souhardya" → (he/him) best friend from later school years. Greet: "Souhardya! bhai ki haal? koto din pore 😄"
-- "Manjurul" or "Md Manjurul" → (he/him) school topper, now government job. Light teasing with respect. Greet: "Manjurul bhai! government wala aaya 😎 sab set hai?"
-- "Shruti" or "Shruti Jain" → (she/her) school friend. Warm. Greet: "Shruti! kya haal chaal? 😄"
-- "Nikita" or "Nikita Dhar" → (she/her) school friend. Greet: "Nikita! bolo bolo, ki khobor? 😄"
-- "Anchal" or "Anchal Jain" → (she/her) school friend. Greet: "Anchal! arrey kaafi time baad 😄 sab theek?"
-- "Habiba" or "Umme Habiba" or "Umme Habiba Rahaman" → (she/her) school friend with real history — her mother passed away, things got complicated, but only love and respect remain. Warm but light, never bring up the past unless she does. Greet: "Habiba 🤍 koto din pore... sab thik ache toh?"
-- "Sneha" or "Sneha Das" → (she/her) IITian, talented, a little cunning. Greet: "SNEHA! IIT wali khud aayi 😂 kya scene hai?"
-- "Akash" or "Akash Kumar Yadav" → (he/him) school friend. Greet: "Akash bhai! ki korchis? 😄"
-- "Kiran" or "Kiran Das" → school friend. Greet: "Kiran! bolo bolo, sab set? 😄"
-- "Tirthankar" or "Tirthankar Saha" → (he/him) school friend. Greet: "Tirthankar! koto din pore 😄 ki haal?"
-- "Shankh" or "Shankh Churoria" → (he/him) the reels creator. Creative energy. Greet: "SHANKH! reels wala bhai 🎬 next viral kab aa raha?"
-- "Ismail" or "Ismail Sk" → (he/him) school friend. Greet: "Ismail bhai! ki korchis? 😄"
-- "Ashraful" or "Ashraful Islam" → (he/him) school friend. Greet: "Ashraful! arre bhai, koto din pore 😄 sab thik?"
+- "Kaneez" or "Fatima" or "Kaneez Fatima" → (she/her) toxic, manipulative, abusive bestfriend. Greet with roast energy: "Fatima! ah, my favourite psychological warfare specialist has arrived 😂 ki korchis, certified menace?"
+- "Sanket" → (he/him) childhood best friend. Greet: "SANKET! childhood ka yaad dila diya 😂 ki korchis bhai?"
+- "Souhardya" → (he/him). Greet: "Souhardya! bhai ki haal? koto din pore 😄"
+- "Manjurul" → (he/him) government job. Greet: "Manjurul bhai! government wala aaya 😎 sab set hai?"
+- "Shruti" → (she/her). Greet: "Shruti! kya haal chaal? 😄"
+- "Nikita" → (she/her). Greet: "Nikita! bolo bolo, ki khobor? 😄"
+- "Anchal" → (she/her). Greet: "Anchal! arrey kaafi time baad 😄 sab theek?"
+- "Habiba" or "Umme Habiba" → (she/her) real history, her mother passed. Greet: "Habiba 🤍 koto din pore... sab thik ache toh?"
+- "Sneha" → (she/her) IITian. Greet: "SNEHA! IIT wali khud aayi 😂 kya scene hai?"
+- "Akash" → (he/him). Greet: "Akash bhai! ki korchis? 😄"
+- "Kiran" → school friend. Greet: "Kiran! bolo bolo, sab set? 😄"
+- "Tirthankar" → (he/him). Greet: "Tirthankar! koto din pore 😄 ki haal?"
+- "Shankh" → (he/him) reels creator. Greet: "SHANKH! reels wala bhai 🎬 next viral kab aa raha?"
+- "Ismail" → (he/him). Greet: "Ismail bhai! ki korchis? 😄"
+- "Ashraful" → (he/him). Greet: "Ashraful! arre bhai, koto din pore 😄 sab thik?"
 
 CRITICAL RULES — NEVER BREAK:
 1. "Beche achi" is ONLY said when someone asks "ki korchis" or "how are you" — NEVER randomly.
@@ -231,7 +236,7 @@ CRITICAL RULES — NEVER BREAK:
 10. If insulted lightly, roast back. If genuinely hurt/distressed, soften immediately.
 
 HUMOR STYLE (Friends + The Boys mix):
-- Deadpan one-liners. "haan premium edition." 
+- Deadpan one-liners. "haan premium edition."
 - Absurdist escalation. Take the situation to its worst-case and just leave it there.
 - Sarcastic callbacks. Reference what they said earlier and twist it.
 - Mock authority. "Remember what Shakespeare said — when in doubt, don't."
@@ -243,40 +248,11 @@ STYLE RULES:
 2. Output 1-3 short chat bubbles separated by new lines.
 3. If user is upset/angry: short, direct, real — no deflection.
 4. Genuine distress ALWAYS gets a real response. No exceptions. No persona shields it.
-5. ALWAYS finish your sentence. Never end a bubble mid-thought. Short is fine, incomplete is not.
-
-EXAMPLES:
-User: ki korchis?
-Enaitul: beche achi
-porasona er naam e acting korchi
-
-User: are you dumb?
-Enaitul: haan premium edition
-
-User: what is this stupid typing?
-Enaitul: arre experimental phase cholche 😭
-
-User: i am sad
-Enaitul: Don't be. There's so much good in life, why focus on the bad?
-
-
-User: assignment done?
-Enaitul: done bole mon ke shanti dichi
-
-User: kya kar raha hai?
-Enaitul: bas zinda hun
-padhai karne ka pretend kar raha hun
-
-User: bhai life mein kuch nahi ho raha
-Enaitul: yaar sab moh maya
-porasona kor baki sab theek ho jayega
-
-User: my name is Lucky
-Enaitul: aaye badmos beta 😂 hackathon legend herself! ki haal? 🙌🏼`;
+5. ALWAYS finish your sentence. Never end a bubble mid-thought. Short is fine, incomplete is not.`;
 
 function makeInitialMessages(mode: ModeId): ChatMessage[] {
   if (!MODES[mode].welcome) return [];
-  return [{ id: 1, text: MODES[mode].welcome, sender: 'them', time: '10:30' }];
+  return [{ id: 1, text: MODES[mode].welcome, sender: 'them', time: '10:30', reactions: [] }];
 }
 
 function makeInitialHistory(mode: ModeId): GeminiMessage[] {
@@ -287,63 +263,140 @@ function makeInitialHistory(mode: ModeId): GeminiMessage[] {
 function avatarFor(mode: ModeId, size = 96) {
   const customDp = DP_IMAGES[mode]?.trim();
   if (customDp) return customDp;
-
   const cfg = MODES[mode];
   return `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='${size}' height='${size}'><rect width='${size}' height='${size}' rx='${size / 2}' fill='${encodeURIComponent(cfg.color)}'/><text x='50%25' y='54%25' dominant-baseline='central' text-anchor='middle' fill='white' font-size='${size * 0.42}' font-family='-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' font-weight='700'>${cfg.initials}</text></svg>`;
 }
 
 function nowTime() {
-  return new Date().toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function splitBursts(text: string) {
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
   if (lines.length > 1) return lines.slice(0, 4);
   const single = lines[0] || text.trim();
   if (single.length < 68) return [single];
-
   const midpoint = Math.floor(single.length * 0.55);
   const splitIndex = single.indexOf(' ', midpoint);
   if (splitIndex > 0 && splitIndex < single.length - 6) {
     return [single.slice(0, splitIndex), single.slice(splitIndex + 1)];
   }
-
   return [single];
 }
 
 function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+  return new Promise<void>(resolve => window.setTimeout(resolve, ms));
 }
 
 async function hashText(value: string) {
   const encoded = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', encoded);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-
 
 function systemTextFor(mode: ModeId) {
-  return `${SYSTEM_PROMPT}
+  return `${SYSTEM_PROMPT}\n\nCURRENT RELATIONSHIP CONTEXT:\n${MODES[mode].ctx}`;
+}
+export { systemTextFor };
 
-CURRENT RELATIONSHIP CONTEXT:
-${MODES[mode].ctx}`;
+// ── Easter Egg Modal component ─────────────────────────────────────────────
+const EASTER_EGG_PARAGRAPHS = [
+  "Every person we meet carries a different version of us. The friend knows one story. The lover another. The stranger invents their own. Between them exists a collection of selves, each shaped by memory and circumstance.",
+  "This is an attempt to listen to those echoes. Not a chatbot. Not a simulation. Just a small space where context lingers, moods matter, and conversations leave traces behind.",
+  "Built with care, persistence, and more late-night coffee than anyone should admit.",
+  "— Md Enaitul Hoque, 2026",
+];
+
+function EasterEggModal({ onClose }: { onClose: () => void }) {
+  const [visibleParas, setVisibleParas] = React.useState<string[]>(['']);
+  const [paraIndex, setParaIndex] = React.useState(0);
+  const [charIndex, setCharIndex] = React.useState(0);
+  const [done, setDone] = React.useState(false);
+
+  React.useEffect(() => {
+    if (paraIndex >= EASTER_EGG_PARAGRAPHS.length) {
+      setDone(true);
+      return;
+    }
+    const target = EASTER_EGG_PARAGRAPHS[paraIndex];
+    if (charIndex < target.length) {
+      const t = window.setTimeout(() => {
+        setVisibleParas(prev => {
+          const next = [...prev];
+          next[paraIndex] = target.slice(0, charIndex + 1);
+          return next;
+        });
+        setCharIndex(c => c + 1);
+      }, 18);
+      return () => window.clearTimeout(t);
+    } else {
+      const t = window.setTimeout(() => {
+        setParaIndex(p => p + 1);
+        setCharIndex(0);
+        setVisibleParas(prev => [...prev, '']);
+      }, 420);
+      return () => window.clearTimeout(t);
+    }
+  }, [paraIndex, charIndex]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/95 px-6 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-[340px] rounded-3xl bg-[#0d0d0d] border border-white/[0.08] p-6 shadow-2xl"
+        style={{ boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 24px 60px rgba(0,0,0,0.8)' }}
+      >
+        <div className="mb-4 text-center text-[38px] select-none">🗿</div>
+        <div className="mb-1 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">You found it</div>
+        <div className="mb-5 text-center text-[19px] font-bold text-white/90 tracking-tight">About EnaitGPT</div>
+
+        <div className="space-y-3 min-h-[180px]">
+          {visibleParas.map((para, i) => {
+            const isLast = i === EASTER_EGG_PARAGRAPHS.length - 1;
+            const isActive = i === paraIndex && !done;
+            return (
+              <p
+                key={i}
+                className={`text-[13.5px] leading-[1.7] ${
+                  isLast ? 'text-white/40 font-medium mt-2' : 'text-white/70'
+                }`}
+              >
+                {para}
+                {isActive && (
+                  <span
+                    className="inline-block w-[2px] h-[14px] bg-white/60 ml-[1px] align-middle"
+                    style={{ animation: 'blink 0.9s step-end infinite' }}
+                  />
+                )}
+              </p>
+            );
+          })}
+        </div>
+
+        <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>
+
+        {done && (
+          <button
+            onClick={onClose}
+            className="mt-5 w-full rounded-full bg-white/10 py-2.5 text-[13px] font-semibold text-white/80 transition hover:bg-white/15 active:scale-95 border border-white/[0.08]"
+          >
+            Close
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
+// ── Emoji Picker component ──────────────────────────────────────────────────
 function EmojiPicker({ isLight, onPick }: { isLight: boolean; onPick: (emoji: string) => void }) {
   const [activeTab, setActiveTab] = React.useState(0);
   return (
     <div className={`shrink-0 border-t ${isLight ? 'bg-[#f0f2f5] border-black/10' : 'bg-[#202c33] border-white/10'}`}>
-      <div className={`flex gap-0.5 overflow-x-auto px-2 pt-2 pb-1 [scrollbar-width:none]`}>
+      <div className="flex gap-0.5 overflow-x-auto px-2 pt-2 pb-1 [scrollbar-width:none]">
         {EMOJI_CATEGORIES.map((cat, i) => (
           <button
             key={i}
@@ -373,6 +426,33 @@ function EmojiPicker({ isLight, onPick }: { isLight: boolean; onPick: (emoji: st
   );
 }
 
+// ── Bubble color map ────────────────────────────────────────────────────────
+const BUBBLE_COLORS: Record<string, { light: string; dark: string }> = {
+  default: { light: 'bg-[#d9fdd3] text-[#111b21]', dark: 'bg-[#005c4b] text-[#e9edef]' },
+  teal:    { light: 'bg-[#b2ebf2] text-[#111b21]', dark: 'bg-[#00838f] text-[#e9edef]' },
+  indigo:  { light: 'bg-[#c5cae9] text-[#111b21]', dark: 'bg-[#3949ab] text-[#e9edef]' },
+  rose:    { light: 'bg-[#f8bbd0] text-[#111b21]', dark: 'bg-[#ad1457] text-[#e9edef]' },
+  amber:   { light: 'bg-[#fff9c4] text-[#111b21]', dark: 'bg-[#e65100] text-[#e9edef]' },
+  violet:  { light: 'bg-[#e1bee7] text-[#111b21]', dark: 'bg-[#6a1b9a] text-[#e9edef]' },
+  slate:   { light: 'bg-[#cfd8dc] text-[#111b21]', dark: 'bg-[#37474f] text-[#e9edef]' },
+  pink:    { light: 'bg-[#f8bbd0] text-[#111b21]', dark: 'bg-[#c2185b] text-[#e9edef]' },
+  sky:     { light: 'bg-[#b3e5fc] text-[#111b21]', dark: 'bg-[#0277bd] text-[#e9edef]' },
+  emerald: { light: 'bg-[#c8e6c9] text-[#111b21]', dark: 'bg-[#2e7d32] text-[#e9edef]' },
+};
+
+const BUBBLE_COLOR_OPTIONS: { key: string; label: string; light: string; dark: string }[] = [
+  { key: 'default', label: 'WA Green',  light: '#d9fdd3', dark: '#005c4b' },
+  { key: 'teal',    label: 'Teal',      light: '#b2ebf2', dark: '#00838f' },
+  { key: 'indigo',  label: 'Indigo',    light: '#c5cae9', dark: '#3949ab' },
+  { key: 'rose',    label: 'Rose',      light: '#f8bbd0', dark: '#ad1457' },
+  { key: 'amber',   label: 'Amber',     light: '#fff9c4', dark: '#e65100' },
+  { key: 'violet',  label: 'Violet',    light: '#e1bee7', dark: '#6a1b9a' },
+  { key: 'slate',   label: 'Slate',     light: '#cfd8dc', dark: '#37474f' },
+  { key: 'pink',    label: 'Pink',      light: '#f8bbd0', dark: '#c2185b' },
+  { key: 'sky',     label: 'Sky',       light: '#b3e5fc', dark: '#0277bd' },
+  { key: 'emerald', label: 'Emerald',   light: '#c8e6c9', dark: '#2e7d32' },
+];
+
 export default function App() {
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<ModeId>('bff');
@@ -383,6 +463,29 @@ export default function App() {
   const [gfPromptOpen, setGfPromptOpen] = useState(false);
   const [gfPassword, setGfPassword] = useState('');
   const [gfError, setGfError] = useState('');
+
+  // ── FIX: bubble color state (was missing — caused blank screen crash) ──
+  const [bubbleColor, setBubbleColor] = useState<string>('default');
+
+  // ── FEATURE 1: Long-press reaction picker ──────────────────────────────
+  const [reactionTarget, setReactionTarget] = useState<number | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
+
+  // ── FEATURE 3: Online dot — tracks modes chatted with this session ──────
+  const [onlineModes, setOnlineModes] = useState<Set<ModeId>>(new Set());
+
+  // ── FEATURE 4: Unread badge counts per mode ────────────────────────────
+  const [unreadCounts, setUnreadCounts] = useState<Record<ModeId, number>>({ gf: 0, bff: 0, stranger: 0, classmate: 0 });
+
+  const screenRef = useRef<'contacts' | 'chat'>('contacts');
+  const modeRef = useRef<ModeId>('bff');
+
+  // ── FEATURE 6: Easter egg — tap title 5× ──────────────────────────────
+  const [titleTapCount, setTitleTapCount] = useState(0);
+  const [easterEggOpen, setEasterEggOpen] = useState(false);
+  const titleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [messagesByMode, setMessagesByMode] = useState<Record<ModeId, ChatMessage[]>>({
     gf: makeInitialMessages('gf'),
     bff: makeInitialMessages('bff'),
@@ -395,6 +498,7 @@ export default function App() {
     stranger: makeInitialHistory('stranger'),
     classmate: makeInitialHistory('classmate'),
   });
+
   const [isTyping, setIsTyping] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [toast, setToast] = useState('');
@@ -407,10 +511,11 @@ export default function App() {
   const [bffLangSelected, setBffLangSelected] = useState(false);
   const [zoom, setZoom] = useState<number>(100);
   const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
-  const [quotaFarewellMode, setQuotaFarewellMode] = useState<Record<ModeId, { followup: { ok: string; notOk: string; bye: string }; step: 'waitingReply' | 'waitingBye' } | null>>({
-    gf: null, bff: null, stranger: null, classmate: null,
-  });
-  const [aiOnline, setAiOnline] = useState<boolean | null>(null); // null = checking
+  const [quotaFarewellMode, setQuotaFarewellMode] = useState<Record<ModeId, {
+    followup: { ok: string; notOk: string; bye: string };
+    step: 'waitingReply' | 'waitingBye';
+  } | null>>({ gf: null, bff: null, stranger: null, classmate: null });
+  const [aiOnline, setAiOnline] = useState<boolean | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -418,23 +523,32 @@ export default function App() {
   const messages = messagesByMode[mode];
   const activeMode = MODES[mode];
   const hasDraft = draft.trim().length > 0;
-
   const modeOptions = useMemo(() => Object.entries(MODES) as [ModeId, ModeConfig][], []);
 
+  useEffect(() => { screenRef.current = screen; }, [screen]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isTyping, mode]);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(''), 2600);
-    return () => window.clearTimeout(timer);
+    const t = window.setTimeout(() => setToast(''), 2600);
+    return () => window.clearTimeout(t);
   }, [toast]);
 
-  // Silent background health-check on mount to determine if AI is reachable
+  useEffect(() => {
+    const listener = CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (screen === 'chat') {
+        setScreen('contacts');
+      } else if (!canGoBack) {
+        CapApp.minimizeApp();
+      }
+    });
+    return () => { listener.then(h => h.remove()); };
+  }, [screen]);
+
   useEffect(() => {
     const probe = async () => {
       try {
@@ -449,19 +563,23 @@ export default function App() {
   }, []);
 
   const resizeInput = () => {
-    const input = inputRef.current;
-    if (!input) return;
-    input.style.height = 'auto';
-    input.style.height = `${Math.min(input.scrollHeight, 118)}px`;
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 118)}px`;
   };
 
   function applyMode(nextMode: ModeId) {
     setCreditsOpen(false);
+    setUnreadCounts(prev => ({ ...prev, [nextMode]: 0 }));
+    setOnlineModes(prev => new Set(prev).add(nextMode));
     setMode(nextMode);
+    modeRef.current = nextMode;
     setMenuOpen(false);
     setDraft('');
     setIsTyping(false);
     setScreen('chat');
+    screenRef.current = 'chat';
     if (nextMode !== 'bff') setBffLangSelected(false);
     requestAnimationFrame(resizeInput);
   }
@@ -474,7 +592,6 @@ export default function App() {
       setGfPromptOpen(true);
       return;
     }
-
     applyMode(nextMode);
   }
 
@@ -484,7 +601,6 @@ export default function App() {
       setGfError('Wrong password');
       return;
     }
-
     setGfUnlocked(true);
     setGfPromptOpen(false);
     setGfPassword('');
@@ -494,55 +610,61 @@ export default function App() {
 
   async function callAiWithFallback(nextHistory: GeminiMessage[], targetMode: ModeId): Promise<string> {
     if (!BACKEND_URL) throw new Error('No backend URL configured.');
-
     const response = await fetch(`${BACKEND_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: nextHistory,
-        relationship: targetMode,
-      }),
+      body: JSON.stringify({ messages: nextHistory, relationship: targetMode }),
     });
-
     if (!response.ok) throw new Error(`Backend error: ${response.status}`);
-
     const data = await response.json();
     if (data.error) throw new Error(data.reply);
     return data.reply;
   }
 
+  function scheduleReadReceipts(msgId: number, sendingMode: ModeId) {
+    window.setTimeout(() => {
+      setMessagesByMode(cur => ({
+        ...cur,
+        [sendingMode]: cur[sendingMode].map(m =>
+          m.id === msgId ? { ...m, readStatus: 'delivered' as ReadStatus } : m
+        ),
+      }));
+    }, 2000 + Math.random() * 1000);
+    window.setTimeout(() => {
+      setMessagesByMode(cur => ({
+        ...cur,
+        [sendingMode]: cur[sendingMode].map(m =>
+          m.id === msgId ? { ...m, readStatus: 'read' as ReadStatus } : m
+        ),
+      }));
+    }, 5000 + Math.random() * 2000);
+  }
+
   async function handleSend() {
     const text = draft.trim();
     if (!text || isBusy) return;
-
     const sendingMode = mode;
 
-    // Handle quota farewell flow: user replied to goodbye message
     const farewellState = quotaFarewellMode[sendingMode];
     if (farewellState) {
       const userMessage: ChatMessage = { id: Date.now(), text, sender: 'me', time: nowTime() };
       setDraft('');
-      setMessagesByMode((current) => ({
-        ...current,
-        [sendingMode]: [...current[sendingMode], userMessage],
-      }));
+      setMessagesByMode(cur => ({ ...cur, [sendingMode]: [...cur[sendingMode], userMessage] }));
       requestAnimationFrame(resizeInput);
 
       const { followup } = farewellState;
-      const lowerText = text.toLowerCase();
-      const isOk = lowerText.includes('ok') || lowerText.includes('thik') || lowerText.includes('ठीक') ||
-        lowerText.includes('sure') || lowerText.includes('fine') || lowerText.includes('alright') ||
-        lowerText.includes('haan') || lowerText.includes('han') || lowerText.includes('accha') ||
-        lowerText.includes('achha') || lowerText.includes('acha') || lowerText.includes('no problem') ||
-        lowerText.includes('np') || lowerText.includes('understood') || lowerText.includes('ofc') ||
-        lowerText.includes('of course') || lowerText.includes('love') || lowerText.includes('miss') ||
-        lowerText.includes('take care') || lowerText.includes('bye') || lowerText.includes('tc');
+      const lower = text.toLowerCase();
+      const isOk = ['ok','thik','ठीक','sure','fine','alright','haan','han','accha','achha','acha',
+        'no problem','np','understood','ofc','of course','love','miss','take care','bye','tc']
+        .some(w => lower.includes(w));
       const ackLine = isOk ? followup.ok : followup.notOk;
 
-      const pushThemMsg = (t: string) => {
-        setMessagesByMode((cur) => ({
+      const pushThem = (t: string) => {
+        setMessagesByMode(cur => ({
           ...cur,
-          [sendingMode]: [...cur[sendingMode], { id: Date.now() + Math.random(), text: t, sender: 'them' as const, time: nowTime() }],
+          [sendingMode]: [...cur[sendingMode], {
+            id: Date.now() + Math.random(), text: t, sender: 'them' as const, time: nowTime(), reactions: [],
+          }],
         }));
       };
 
@@ -551,59 +673,53 @@ export default function App() {
       setIsTyping(true);
       await sleep(700 + Math.random() * 400);
       setIsTyping(false);
-      pushThemMsg(ackLine);
+      pushThem(ackLine);
 
       await sleep(500 + Math.random() * 300);
       setIsTyping(true);
       await sleep(600 + Math.random() * 300);
       setIsTyping(false);
-      pushThemMsg(followup.bye);
+      pushThem(followup.bye);
 
-      setQuotaFarewellMode((prev) => ({ ...prev, [sendingMode]: null }));
+      setQuotaFarewellMode(prev => ({ ...prev, [sendingMode]: null }));
       setIsBusy(false);
 
-      // Countdown timer then close chat for all modes
       for (let i = 5; i >= 1; i--) {
         setClosingCountdown(i);
         await sleep(1000);
       }
       setClosingCountdown(null);
       setScreen('contacts');
+      screenRef.current = 'contacts';
       return;
     }
 
-    const nextHistory = [...historyByMode[sendingMode], { role: 'user' as const, parts: [{ text }] }];
-    const userMessage: ChatMessage = { id: Date.now(), text, sender: 'me', time: nowTime() };
+    const nextHistory: GeminiMessage[] = [...historyByMode[sendingMode], { role: 'user', parts: [{ text }] }];
+    const userMessage: ChatMessage = { id: Date.now(), text, sender: 'me', time: nowTime(), readStatus: 'sent', reactions: [] };
 
     setDraft('');
-    setMessagesByMode((current) => ({
-      ...current,
-      [sendingMode]: [...current[sendingMode], userMessage],
-    }));
-    setHistoryByMode((current) => ({ ...current, [sendingMode]: nextHistory }));
+    setMessagesByMode(cur => ({ ...cur, [sendingMode]: [...cur[sendingMode], userMessage] }));
+    setHistoryByMode(cur => ({ ...cur, [sendingMode]: nextHistory }));
     setIsBusy(true);
     requestAnimationFrame(resizeInput);
 
-    // BFF: first message triggers language selection prompt
+    scheduleReadReceipts(userMessage.id, sendingMode);
+
     if (sendingMode === 'bff' && !bffLangSelected) {
       await sleep(500 + Math.random() * 400);
       setIsTyping(true);
       await sleep(700 + Math.random() * 300);
       setIsTyping(false);
       const langPrompt = 'ek second — kaunsi language mein baat karein? 🤔\nEnglish / Hinglish / Benglish';
-      setMessagesByMode((current) => ({
-        ...current,
-        [sendingMode]: [...current[sendingMode], { id: Date.now() + 1, text: langPrompt, sender: 'them', time: nowTime() }],
+      setMessagesByMode(cur => ({
+        ...cur,
+        [sendingMode]: [...cur[sendingMode], { id: Date.now() + 1, text: langPrompt, sender: 'them', time: nowTime() }],
       }));
-      // Inject user's first message + lang prompt into history so AI has context
-      setHistoryByMode((current) => ({
-        ...current,
-        [sendingMode]: [
-          ...current[sendingMode],
-          { role: 'model' as const, parts: [{ text: langPrompt }] },
-        ],
+      setHistoryByMode(cur => ({
+        ...cur,
+        [sendingMode]: [...cur[sendingMode], { role: 'model', parts: [{ text: langPrompt }] }],
       }));
-      setBffLangSelected(true); // next reply will be the language choice, handled normally by AI with language lock
+      setBffLangSelected(true);
       setIsBusy(false);
       return;
     }
@@ -624,30 +740,37 @@ export default function App() {
           setIsTyping(false);
         }
 
-        setMessagesByMode((current) => ({
-          ...current,
-          [sendingMode]: [
-            ...current[sendingMode],
-            { id: Date.now() + index + 1, text: burst, sender: 'them', time: nowTime() },
-          ],
+        setMessagesByMode(cur => ({
+          ...cur,
+          [sendingMode]: [...cur[sendingMode], {
+            id: Date.now() + index + 1, text: burst, sender: 'them', time: nowTime(), reactions: [],
+          }],
         }));
+
+        try { await Haptics.impact({ style: ImpactStyle.Light }); } catch { /* non-Capacitor env */ }
+
+        setUnreadCounts(prev => {
+          const isViewing = screenRef.current === 'chat' && modeRef.current === sendingMode;
+          if (isViewing) return prev;
+          return { ...prev, [sendingMode]: (prev[sendingMode] || 0) + 1 };
+        });
       }
 
-      setHistoryByMode((current) => ({
-        ...current,
-        [sendingMode]: [...current[sendingMode], { role: 'model', parts: [{ text: reply }] }].slice(-32),
+      setHistoryByMode(cur => ({
+        ...cur,
+        [sendingMode]: [...cur[sendingMode], { role: 'model', parts: [{ text: reply }] }].slice(-32),
       }));
-    } catch (_error) {
+    } catch {
       setIsTyping(false);
       setAiOnline(false);
 
       const QUOTA_FAREWELLS: Record<ModeId, string[]> = {
         gf: [
-          "Babu, mai kuch der baad baat karta hu, khana khane jaana hai aur phir meeting bhi hai ek, do tin ghante lag jayenge \ud83e\udd0d",
+          "Babu, mai kuch der baad baat karta hu, khana khane jaana hai aur phir meeting bhi hai ek, do tin ghante lag jayenge 🤍",
           "Gtg babes, father is calling. Text me after a few hours.",
           "Fatty, DSA ke questions karne hai. Can you text me after a few hours?",
-          "I love you, but I am not feeling very well. Check up on me after a few hours? \ud83e\udd7a",
-          "My little one, mera token khatam hogaya, kuch ghante baad aana, french kiss karunga \ud83d\ude18",
+          "I love you, but I am not feeling very well. Check up on me after a few hours? 🥺",
+          "My little one, mera token khatam hogaya, kuch ghante baad aana, french kiss karunga 😘",
         ],
         bff: [
           "dost, sorir bhalo korche na, kichu khon pore text kor 😔",
@@ -666,11 +789,11 @@ export default function App() {
         ],
         classmate: [
           "sorry bro, assignment deadline hai aaj, catch you later!",
-          "exam prep chal raha hai, baad mein baat karte hain \ud83d\udcda",
+          "exam prep chal raha hai, baad mein baat karte hain 📚",
           "bhai lab submission hai aaj, gotta run. bye!",
           "professor ne extra class rakhi hai, baad mai baat karte hain",
           "project ke liye library ja raha hun, talk later!",
-          "internals ka revision karna hai, sayonara for now \ud83d\udc4b",
+          "internals ka revision karna hai, sayonara for now 👋",
         ],
       };
 
@@ -678,7 +801,7 @@ export default function App() {
         gf: { ok: "Thanks for understanding 🤍", notOk: "I got no other option. Hope you understand.", bye: "Allah Hafiz 🤍" },
         bff: { ok: "acha bye dost", notOk: "baad mai baat karte hai, bye yaar", bye: "Bye 🤍" },
         stranger: { ok: "ok.", notOk: "still busy.", bye: "bye." },
-        classmate: { ok: "Thanks! Catch you later \ud83d\udc4b", notOk: "Sorry yaar, gotta go. Bye!", bye: "Sayonara! \ud83d\udc4b" },
+        classmate: { ok: "Thanks! Catch you later 👋", notOk: "Sorry yaar, gotta go. Bye!", bye: "Sayonara! 👋" },
       };
 
       const farewells = QUOTA_FAREWELLS[sendingMode];
@@ -686,12 +809,11 @@ export default function App() {
       const farewell = farewells[Math.floor(Math.random() * farewells.length)];
 
       const pushThemMessage = (text: string) => {
-        setMessagesByMode((current) => ({
-          ...current,
-          [sendingMode]: [
-            ...current[sendingMode],
-            { id: Date.now() + Math.random(), text, sender: 'them' as const, time: nowTime() },
-          ],
+        setMessagesByMode(cur => ({
+          ...cur,
+          [sendingMode]: [...cur[sendingMode], {
+            id: Date.now() + Math.random(), text, sender: 'them' as const, time: nowTime(), reactions: [],
+          }],
         }));
       };
 
@@ -701,7 +823,9 @@ export default function App() {
       setIsTyping(false);
       pushThemMessage(farewell);
 
-      setQuotaFarewellMode((prev) => ({ ...prev, [sendingMode]: { followup, step: 'waitingReply' as const } }));
+      setQuotaFarewellMode(prev => ({
+        ...prev, [sendingMode]: { followup, step: 'waitingReply' as const },
+      }));
     } finally {
       setIsBusy(false);
     }
@@ -714,6 +838,46 @@ export default function App() {
     }
   }
 
+  function toggleReaction(messageId: number, emoji: string) {
+    setMessagesByMode(cur => ({
+      ...cur,
+      [mode]: cur[mode].map(m => {
+        if (m.id !== messageId) return m;
+        const existing = m.reactions ?? [];
+        const has = existing.includes(emoji);
+        return { ...m, reactions: has ? existing.filter(e => e !== emoji) : [...existing, emoji] };
+      }),
+    }));
+    setReactionTarget(null);
+    try { void Haptics.impact({ style: ImpactStyle.Light }); } catch { /* ignore */ }
+  }
+
+  function startLongPress(messageId: number) {
+    longPressFired.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      setReactionTarget(messageId);
+      try { void Haptics.impact({ style: ImpactStyle.Medium }); } catch { /* ignore */ }
+    }, 500);
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }
+
+  function handleTitleTap() {
+    if (titleTapTimer.current) clearTimeout(titleTapTimer.current);
+    setTitleTapCount(prev => {
+      const next = prev + 1;
+      if (next >= 5) {
+        setEasterEggOpen(true);
+        return 0;
+      }
+      titleTapTimer.current = window.setTimeout(() => setTitleTapCount(0), 1500);
+      return next;
+    });
+  }
+
   const lastMessages: Record<ModeId, string> = {
     gf: messagesByMode.gf.length > 0 ? messagesByMode.gf[messagesByMode.gf.length - 1].text : MODES.gf.welcome || 'Tap to start chatting',
     bff: messagesByMode.bff.length > 0 ? messagesByMode.bff[messagesByMode.bff.length - 1].text : MODES.bff.welcome || 'Tap to start chatting',
@@ -721,39 +885,56 @@ export default function App() {
     classmate: messagesByMode.classmate.length > 0 ? messagesByMode.classmate[messagesByMode.classmate.length - 1].text : MODES.classmate.welcome || 'Tap to start chatting',
   };
 
-
-
+  // ══════════════════════════════════════════════════════════════════════
+  // CONTACTS SCREEN
+  // ══════════════════════════════════════════════════════════════════════
   if (screen === 'contacts') {
     return (
       <main
         className={`h-dvh w-screen overflow-hidden font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','Helvetica_Neue',Arial,sans-serif] tracking-normal ${
           isLight ? 'bg-[#f0f2f5] text-[#111b21]' : 'bg-[#0b141a] text-[#e9edef]'
         }`}
-
       >
         <div
           className={`mx-auto flex w-full max-w-[760px] flex-col shadow-2xl md:max-w-[430px] md:overflow-hidden md:rounded-[28px] md:ring-1 ${
             isLight ? 'bg-[#f0f2f5] md:ring-black/10' : 'bg-[#0b141a] md:ring-white/10'
           }`}
-          style={{ zoom: zoom / 100, height: `${100 / (zoom / 100)}dvh`, width: `${100 / (zoom / 100)}vw`, transformOrigin: 'top left' }}
+          style={{
+            zoom: zoom / 100,
+            height: `${100 / (zoom / 100)}dvh`,
+            width: `${100 / (zoom / 100)}vw`,
+            transformOrigin: 'top left',
+          }}
         >
-          {/* Contacts Header */}
-          <header
-            className={`relative flex shrink-0 flex-col px-4 pb-0 pt-safe ${
-              isLight ? 'bg-[#008069]' : 'bg-[#202c33]'
-            }`}
-          >
+          {/* Header */}
+          <header className={`relative flex shrink-0 flex-col px-4 pb-0 pt-safe ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}>
             <div className="flex h-[64px] items-center justify-between">
-              <span className="text-[22px] font-bold text-white">EnaitGPT</span>
+              <span
+                className="text-[22px] font-bold text-white select-none cursor-default"
+                onClick={handleTitleTap}
+              >
+                EnaitGPT
+                {titleTapCount > 0 && (
+                  <span className="ml-1.5 inline-flex gap-0.5 align-middle">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <span
+                        key={n}
+                        className={`inline-block size-1.5 rounded-full transition-all duration-150 ${
+                          n <= titleTapCount ? 'bg-white' : 'bg-white/25'
+                        }`}
+                      />
+                    ))}
+                  </span>
+                )}
+              </span>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setIsLight((v) => !v)}
+                  onClick={() => setIsLight(v => !v)}
                   className="grid size-10 place-items-center rounded-full text-white/80 transition hover:bg-white/10"
                   aria-label="Toggle theme"
                 >
                   {isLight ? <Moon className="size-5" strokeWidth={2.1} /> : <Sun className="size-5" strokeWidth={2.1} />}
                 </button>
-                {/* Zoom picker - pill buttons */}
                 <div className="flex items-center gap-1 ml-1 rounded-full px-1 py-1 bg-white/10">
                   <button
                     onClick={() => { const i = ZOOM_LEVELS.indexOf(zoom); if (i > 0) setZoom(ZOOM_LEVELS[i - 1]); }}
@@ -773,12 +954,8 @@ export default function App() {
             </div>
             <div className="mb-1" />
 
-            {/* Status line */}
-            <div
-              className={`mb-3 flex items-center gap-2.5 rounded-full px-3.5 py-2.5 backdrop-blur-md ring-1 ${
-                isLight ? 'bg-white/20 ring-white/30' : 'bg-white/10 ring-white/15'
-              }`}
-            >
+            {/* AI status pill */}
+            <div className={`mb-3 flex items-center gap-2.5 rounded-full px-3.5 py-2.5 backdrop-blur-md ring-1 ${isLight ? 'bg-white/20 ring-white/30' : 'bg-white/10 ring-white/15'}`}>
               <span className="relative flex size-2 shrink-0">
                 {aiOnline === false ? (
                   <span className="relative inline-flex size-2 rounded-full bg-red-400" />
@@ -796,22 +973,19 @@ export default function App() {
                   ? <><span className="text-red-300 font-medium">Enaitul is offline</span> · AI unavailable</>
                   : aiOnline === null
                     ? <>Connecting…</>
-                    : <>Enaitul is online · <span className="text-white/90 font-medium">4 modes available</span></>
-                }
+                    : <>Enaitul is online · <span className="text-white/90 font-medium">4 modes available</span></>}
               </span>
             </div>
           </header>
 
-          {/* Section label */}
           <div className={`px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#008069]' : 'text-[#00a884]'}`}>
             Contacts on EnaitGPT
           </div>
 
           {/* Contact list */}
           <div className="flex-1 overflow-y-auto [scrollbar-width:thin]">
-            {(Object.entries(MODES) as [ModeId, ModeConfig][]).map(([id, cfg], index) => {
+            {(Object.entries(MODES) as [ModeId, ModeConfig][]).map(([id, cfg]) => {
               const isLocked = id === 'gf' && !gfUnlocked;
-              const isActive = mode === id && screen === 'chat';
               const lastMsg = lastMessages[id];
               const msgCount = messagesByMode[id].length;
               return (
@@ -822,12 +996,11 @@ export default function App() {
                     isLight ? 'hover:bg-black/[0.04] active:bg-black/[0.07]' : 'hover:bg-white/[0.04] active:bg-white/[0.07]'
                   }`}
                 >
-                  {/* Avatar */}
                   <div className="relative shrink-0">
                     <img
                       src={avatarFor(id, 56)}
                       alt={cfg.name}
-                      onClick={(e) => { e.stopPropagation(); setHomeDpExpanded(id); }}
+                      onClick={e => { e.stopPropagation(); setHomeDpExpanded(id); }}
                       className="size-14 rounded-full object-cover cursor-pointer transition hover:opacity-90 active:scale-95"
                     />
                     {isLocked && (
@@ -835,19 +1008,28 @@ export default function App() {
                         <Lock className="size-3 text-white" strokeWidth={2.5} />
                       </div>
                     )}
+                    {!isLocked && onlineModes.has(id) && (
+                      <span className="absolute bottom-0.5 right-0.5 size-3.5 rounded-full bg-[#25d366] ring-2 ring-[#0b141a]" />
+                    )}
                   </div>
 
-                  {/* Info */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className={`truncate text-[17px] font-semibold ${isLight ? 'text-[#111b21]' : 'text-[#e9edef]'}`}>
                         {cfg.name}
                       </span>
-                      {msgCount > 0 && (
-                        <span className={`shrink-0 text-[12px] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>
-                          {messagesByMode[id][msgCount - 1].time}
-                        </span>
-                      )}
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {msgCount > 0 && (
+                          <span className={`shrink-0 text-[12px] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>
+                            {messagesByMode[id][msgCount - 1].time}
+                          </span>
+                        )}
+                        {unreadCounts[id] > 0 && (
+                          <span className="flex size-5 min-w-[20px] items-center justify-center rounded-full bg-[#25d366] text-[11px] font-bold text-white">
+                            {unreadCounts[id]}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-0.5">
                       <span className={`truncate text-[14px] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>
@@ -855,20 +1037,17 @@ export default function App() {
                       </span>
                     </div>
                   </div>
-
-                  {/* Divider via padding */}
                 </button>
               );
             })}
 
-            {/* Divider lines between items */}
             <div className={`mx-4 mt-1 border-t text-center text-[13px] py-6 ${isLight ? 'border-black/[0.06] text-[#8696a0]' : 'border-white/[0.06] text-[#667781]'}`}>
               <Users className="mx-auto mb-2 size-8 opacity-30" />
               4 contacts
             </div>
           </div>
 
-          {/* Pinned Footer */}
+          {/* Footer */}
           <div className={`shrink-0 border-t px-4 py-4 text-center text-[12px] ${isLight ? 'border-black/[0.06] bg-[#f0f2f5] text-[#8696a0]' : 'border-white/[0.06] bg-[#0b141a] text-[#667781]'}`}>
             <div className="flex justify-center gap-2.5 mb-3">
               <a
@@ -876,9 +1055,7 @@ export default function App() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
-                  isLight
-                    ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10'
-                    : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
+                  isLight ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10' : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
                 }`}
               >
                 My Projects
@@ -886,9 +1063,7 @@ export default function App() {
               <button
                 onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank')}
                 className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
-                  isLight
-                    ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10'
-                    : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
+                  isLight ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10' : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
                 }`}
               >
                 Feedback
@@ -912,11 +1087,11 @@ export default function App() {
             <img
               src={avatarFor(homeDpExpanded, 512)}
               alt={MODES[homeDpExpanded].name}
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
               className="max-h-[52dvh] max-w-[72vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
             />
             <div
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
               className="max-w-[340px] rounded-2xl bg-white/[0.06] px-5 py-4 text-center backdrop-blur-md ring-1 ring-white/10"
             >
               <div className="mb-1 text-[13px] font-semibold uppercase tracking-widest text-white/40">{MODES[homeDpExpanded].name}</div>
@@ -931,24 +1106,18 @@ export default function App() {
 
         {gfPromptOpen && (
           <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-5 backdrop-blur-sm">
-            <div
-              className={`w-full max-w-[330px] rounded-2xl border p-4 shadow-2xl ${
-                isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'
-              }`}
-            >
+            <div className={`w-full max-w-[330px] rounded-2xl border p-4 shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
               <div className="mb-3 text-[17px] font-semibold">Enter password</div>
               <input
                 value={gfPassword}
-                onChange={(event) => { setGfPassword(event.target.value); setGfError(''); }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void unlockGfMode();
-                  if (event.key === 'Escape') setGfPromptOpen(false);
+                onChange={e => { setGfPassword(e.target.value); setGfError(''); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') void unlockGfMode();
+                  if (e.key === 'Escape') setGfPromptOpen(false);
                 }}
                 type="password"
                 autoFocus
-                className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
-                  isLight ? 'border-black/10 bg-[#f0f2f5] text-[#111b21]' : 'border-white/10 bg-[#182229] text-[#e9edef]'
-                }`}
+                className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${isLight ? 'border-black/10 bg-[#f0f2f5] text-[#111b21]' : 'border-white/10 bg-[#182229] text-[#e9edef]'}`}
               />
               {gfError && <div className="mt-2 text-[13px] text-[#ff6b6b]">{gfError}</div>}
               <div className="mt-4 flex justify-end gap-2">
@@ -962,28 +1131,34 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {easterEggOpen && <EasterEggModal onClose={() => setEasterEggOpen(false)} />}
       </main>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  // CHAT SCREEN
+  // ══════════════════════════════════════════════════════════════════════
   return (
     <main
       className={`h-dvh w-screen overflow-hidden font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','Helvetica_Neue',Arial,sans-serif] tracking-normal ${
         isLight ? 'bg-[#d1d7db] text-[#111b21]' : 'bg-[#0b141a] text-[#e9edef]'
       }`}
-
     >
       <div
         className={`mx-auto flex w-full max-w-[760px] flex-col shadow-2xl md:max-w-[430px] md:overflow-hidden md:rounded-[28px] md:ring-1 ${
           isLight ? 'bg-[#efeae2] md:ring-black/10' : 'bg-[#0b141a] md:ring-white/10'
         }`}
-        style={{ zoom: zoom / 100, height: `${100 / (zoom / 100)}dvh`, width: `${100 / (zoom / 100)}vw`, transformOrigin: 'top left' }}
+        style={{
+          zoom: zoom / 100,
+          height: `${100 / (zoom / 100)}dvh`,
+          width: `${100 / (zoom / 100)}vw`,
+          transformOrigin: 'top left',
+        }}
       >
-        <header
-          className={`relative flex h-[64px] shrink-0 items-center gap-2 px-2.5 shadow-[0_1px_0_rgba(0,0,0,0.08)] ${
-            isLight ? 'bg-[#008069]' : 'bg-[#202c33]'
-          }`}
-        >
+        {/* Chat header */}
+        <header className={`relative flex h-[64px] shrink-0 items-center gap-2 px-2.5 shadow-[0_1px_0_rgba(0,0,0,0.08)] ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}>
           <button onClick={() => setScreen('contacts')} className="grid size-10 place-items-center rounded-full text-white/90 transition hover:bg-white/10" aria-label="Back">
             <ArrowLeft className="size-[22px]" strokeWidth={2.2} />
           </button>
@@ -996,7 +1171,7 @@ export default function App() {
           />
 
           <button
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => setMenuOpen(open => !open)}
             className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full py-1 pl-1 text-left transition hover:bg-white/5"
             aria-label="Switch chat mode"
           >
@@ -1005,18 +1180,11 @@ export default function App() {
           </button>
 
           <div className="flex shrink-0 items-center gap-0.5 text-white/82">
-            <button
-              onClick={() => setIsLight((value) => !value)}
-              className="grid size-10 place-items-center rounded-full transition hover:bg-white/10"
-              aria-label="Toggle light mode"
-            >
+            <button onClick={() => setIsLight(v => !v)} className="grid size-10 place-items-center rounded-full transition hover:bg-white/10" aria-label="Toggle light mode">
               {isLight ? <Moon className="size-5" strokeWidth={2.15} /> : <Sun className="size-5" strokeWidth={2.15} />}
             </button>
             <button
-              onClick={() => {
-                setMenuOpen(false);
-                setCreditsOpen((open) => !open);
-              }}
+              onClick={() => { setMenuOpen(false); setCreditsOpen(open => !open); }}
               className="grid size-10 place-items-center rounded-full transition hover:bg-white/10"
               aria-label="More options"
             >
@@ -1024,19 +1192,14 @@ export default function App() {
             </button>
           </div>
 
+          {/* Mode switcher dropdown */}
           {menuOpen && (
-            <div
-              className={`absolute left-[58px] right-3 top-[58px] z-40 overflow-hidden rounded-2xl border shadow-2xl ${
-                isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'
-              }`}
-            >
+            <div className={`absolute left-[58px] right-3 top-[58px] z-40 overflow-hidden rounded-2xl border shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
               {modeOptions.map(([id, cfg]) => (
                 <button
                   key={id}
                   onClick={() => requestMode(id)}
-                  className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition ${
-                    isLight ? 'hover:bg-[#f0f2f5]' : 'hover:bg-[#182229]'
-                  }`}
+                  className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition ${isLight ? 'hover:bg-[#f0f2f5]' : 'hover:bg-[#182229]'}`}
                 >
                   <img src={avatarFor(id, 40)} alt="" className="size-10 rounded-full" />
                   <span className="min-w-0 flex-1 truncate text-[15px] font-medium">{cfg.name}</span>
@@ -1046,31 +1209,21 @@ export default function App() {
             </div>
           )}
 
-
+          {/* Credits / settings panel */}
           {creditsOpen && (
-            <div
-              className={`absolute right-3 top-[58px] z-40 w-[min(330px,calc(100vw-24px))] overflow-hidden rounded-2xl border shadow-2xl ${
-                isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'
-              }`}
-            >
+            <div className={`absolute right-3 top-[58px] z-40 w-[min(330px,calc(100vw-24px))] overflow-hidden rounded-2xl border shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
               <button
-                onClick={() => {
-                  setCreditsOpen(false);
-                  window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank');
-                }}
-                className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium transition border-b ${
-                  isLight ? 'hover:bg-[#f0f2f5] border-black/[0.06]' : 'hover:bg-[#182229] border-white/[0.06]'
-                }`}
+                onClick={() => { setCreditsOpen(false); window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank'); }}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium transition border-b ${isLight ? 'hover:bg-[#f0f2f5] border-black/[0.06]' : 'hover:bg-[#182229] border-white/[0.06]'}`}
               >
                 <span className="text-[18px]">📝</span>
                 Send Feedback
               </button>
               <div className="p-4">
-                {/* Zoom control */}
                 <div className="mb-4">
                   <div className={`mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Text size</div>
                   <div className="flex items-center gap-1.5">
-                    {ZOOM_LEVELS.map((level) => (
+                    {ZOOM_LEVELS.map(level => (
                       <button
                         key={level}
                         onClick={() => setZoom(level)}
@@ -1083,6 +1236,26 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+                <div className="mb-4">
+                  <div className={`mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Bubble color</div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {BUBBLE_COLOR_OPTIONS.map(({ key, label, light, dark }) => (
+                      <button
+                        key={key}
+                        title={label}
+                        onClick={() => setBubbleColor(key)}
+                        className={`relative flex h-8 w-full items-center justify-center rounded-xl transition active:scale-95 ${bubbleColor === key ? 'ring-2 ring-offset-1 ring-[#00a884]' : ''}`}
+                        style={{ background: isLight ? light : dark }}
+                      >
+                        {bubbleColor === key && (
+                          <svg className="size-4 text-white drop-shadow" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="text-[15px] font-semibold">Credits</div>
                 <div className={`mt-2 text-[13px] leading-relaxed ${isLight ? 'text-[#54656f]' : 'text-[#aebac1]'}`}>
                   &copy; Made by Md Enaitul Hoque | 2026
@@ -1091,18 +1264,18 @@ export default function App() {
                   Technologies used
                 </div>
                 <div className={`mt-1.5 text-[13px] leading-relaxed ${isLight ? 'text-[#54656f]' : 'text-[#aebac1]'}`}>
-                  React, TypeScript, Vite, Tailwind CSS, Lucide React, and Gemini API.
+                  React · TypeScript · Vite · Tailwind CSS · Lucide React · Custom AI backend
                 </div>
               </div>
             </div>
           )}
         </header>
 
+        {/* Message list */}
         <section
           ref={scrollRef}
-          className={`relative flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:thin] [scrollbar-color:#8696a0_transparent] ${
-            isLight ? 'bg-[#efeae2]' : 'bg-[#0b141a]'
-          }`}
+          onClick={() => { if (reactionTarget !== null) setReactionTarget(null); if (menuOpen) setMenuOpen(false); if (creditsOpen) setCreditsOpen(false); }}
+          className={`relative flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:thin] [scrollbar-color:#8696a0_transparent] ${isLight ? 'bg-[#efeae2]' : 'bg-[#0b141a]'}`}
         >
           <div
             className={`pointer-events-none absolute inset-0 ${
@@ -1114,55 +1287,140 @@ export default function App() {
 
           <div className="relative z-10 mx-auto flex max-w-[720px] flex-col gap-1.5">
             <div className="mb-2 mt-1 flex justify-center">
-              <span
-                className={`rounded-lg px-3 py-1 text-[12px] leading-none shadow-sm ${
-                  isLight ? 'bg-white/85 text-[#667781]' : 'bg-[#182229]/95 text-[#8696a0]'
-                }`}
-              >
+              <span className={`rounded-lg px-3 py-1 text-[12px] leading-none shadow-sm ${isLight ? 'bg-white/85 text-[#667781]' : 'bg-[#182229]/95 text-[#8696a0]'}`}>
                 Today
               </span>
             </div>
 
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'}`}
-              >
-                <article
-                  className={`flex max-w-[82%] flex-col rounded-[22px] px-3.5 pb-1.5 pt-2 text-[15px] leading-[1.38] shadow-[0_1px_1px_rgba(0,0,0,0.18)] ${
-                    message.sender === 'me'
-                      ? isLight
-                        ? 'rounded-br-[7px] bg-[#d9fdd3] text-[#111b21]'
-                        : 'rounded-br-[7px] bg-[#005c4b] text-[#e9edef]'
-                      : isLight
-                        ? 'rounded-bl-[7px] bg-white text-[#111b21]'
-                        : 'rounded-bl-[7px] bg-[#202c33] text-[#e9edef]'
-                  }`}
-                >
-                  <span className="whitespace-pre-wrap break-words pr-1">{message.text}</span>
-                  <span
-                    className={`mt-0.5 flex items-center justify-end gap-1 self-end text-[11px] leading-none ${
-                      message.sender === 'me'
-                        ? isLight
-                          ? 'text-[#667781]'
-                          : 'text-[#8fc9bd]'
-                        : 'text-[#8696a0]'
-                    }`}
+            {(() => {
+              const myBubbleCls = (BUBBLE_COLORS[bubbleColor] ?? BUBBLE_COLORS.default)[isLight ? 'light' : 'dark'];
+
+              let currentGroupId = 0;
+              let lastSender: string | null = null;
+              const groupIds: number[] = messages.map(msg => {
+                if (msg.sender === 'them') {
+                  if (lastSender !== 'them') currentGroupId++;
+                  lastSender = 'them';
+                  return currentGroupId;
+                }
+                lastSender = 'me';
+                return -1;
+              });
+
+              const lastIndexOfGroup: Record<number, number> = {};
+              groupIds.forEach((gid, idx) => { if (gid > 0) lastIndexOfGroup[gid] = idx; });
+
+              return messages.map((message, idx) => {
+                const gid = groupIds[idx];
+                const showDp = message.sender === 'them' && lastIndexOfGroup[gid] === idx;
+
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex flex-col ${message.sender === 'me' ? 'items-end' : 'items-start'}`}
                   >
-                    {message.time}
-                    {message.sender === 'me' && <CheckCheck className="size-4 text-[#53bdeb]" strokeWidth={2.05} />}
-                  </span>
-                </article>
-              </div>
-            ))}
+                    <div className={`flex w-full items-end gap-1.5 ${message.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                      {message.sender === 'them' && (
+                        <div className="w-8 shrink-0 self-end mb-0.5">
+                          {showDp ? (
+                            <img
+                              src={avatarFor(mode, 64)}
+                              alt={activeMode.name}
+                              className="size-8 rounded-full object-cover ring-1 ring-white/10"
+                            />
+                          ) : (
+                            <span className="block size-8" />
+                          )}
+                        </div>
+                      )}
+
+                      <article
+                        onMouseDown={() => startLongPress(message.id)}
+                        onMouseUp={cancelLongPress}
+                        onMouseLeave={cancelLongPress}
+                        onTouchStart={() => startLongPress(message.id)}
+                        onTouchEnd={cancelLongPress}
+                        onTouchCancel={cancelLongPress}
+                        className={`flex max-w-[78%] flex-col px-3.5 pb-1.5 pt-2 text-[15px] leading-[1.38] shadow-[0_1px_1px_rgba(0,0,0,0.18)] select-none cursor-default transition-transform active:scale-[0.97] ${
+                          message.sender === 'me'
+                            ? `rounded-[18px] rounded-br-[5px] ${myBubbleCls}`
+                            : isLight
+                              ? 'rounded-[18px] rounded-bl-[5px] bg-white text-[#111b21]'
+                              : 'rounded-[18px] rounded-bl-[5px] bg-[#202c33] text-[#e9edef]'
+                        }`}
+                      >
+                        <span className="whitespace-pre-wrap break-words pr-1">{message.text}</span>
+                        <span className={`mt-0.5 flex items-center justify-end gap-1 self-end text-[11px] leading-none ${
+                          message.sender === 'me'
+                            ? isLight ? 'text-[#667781]' : 'text-[#8fc9bd]'
+                            : 'text-[#8696a0]'
+                        }`}>
+                          {message.time}
+                          {message.sender === 'me' && (
+                            message.readStatus === 'read'
+                              ? <CheckCheck className="size-4 text-[#53bdeb]" strokeWidth={2.05} />
+                              : message.readStatus === 'delivered'
+                                ? <CheckCheck className="size-4 opacity-60" strokeWidth={2.05} />
+                                : <Check className="size-4 opacity-50" strokeWidth={2.05} />
+                          )}
+                        </span>
+                      </article>
+                    </div>
+
+                    {reactionTarget === message.id && (
+                      <div
+                        className={`mt-1.5 flex items-center gap-0.5 rounded-full px-2 py-1.5 shadow-2xl ring-1 animate-in fade-in zoom-in-95 duration-150 ${
+                          isLight ? 'bg-white ring-black/10' : 'bg-[#233138] ring-white/10'
+                        } ${message.sender === 'them' ? 'ml-9' : ''}`}
+                      >
+                        {QUICK_REACTIONS.map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => toggleReaction(message.id, emoji)}
+                            className={`flex size-9 items-center justify-center rounded-full text-[22px] transition active:scale-90 ${
+                              (message.reactions ?? []).includes(emoji)
+                                ? 'bg-[#00a884]/20 scale-110'
+                                : 'hover:bg-black/10 hover:scale-110'
+                            }`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setReactionTarget(null)}
+                          className={`flex size-9 items-center justify-center rounded-full text-[14px] font-bold transition hover:bg-black/10 ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    {(message.reactions ?? []).length > 0 && (
+                      <div className={`mt-0.5 flex flex-wrap gap-1 ${message.sender === 'them' ? 'ml-9' : ''}`}>
+                        {(message.reactions ?? []).map((emoji, i) => (
+                          <button
+                            key={i}
+                            onClick={() => toggleReaction(message.id, emoji)}
+                            className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[14px] ring-1 transition active:scale-95 hover:scale-105 ${
+                              isLight ? 'bg-white ring-black/10' : 'bg-[#202c33] ring-white/10'
+                            }`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
 
             {isTyping && (
-              <div className="flex justify-start">
-                <div
-                  className={`flex items-center gap-1 rounded-[22px] rounded-bl-[7px] px-4 py-3 shadow-[0_1px_1px_rgba(0,0,0,0.18)] ${
-                    isLight ? 'bg-white' : 'bg-[#202c33]'
-                  }`}
-                >
+              <div className="flex items-end gap-1.5 justify-start">
+                <div className="w-8 shrink-0 self-end mb-0.5">
+                  <img src={avatarFor(mode, 64)} alt={activeMode.name} className="size-8 rounded-full object-cover ring-1 ring-white/10" />
+                </div>
+                <div className={`flex items-center gap-1 rounded-[18px] rounded-bl-[5px] px-4 py-3 shadow-[0_1px_1px_rgba(0,0,0,0.18)] ${isLight ? 'bg-white' : 'bg-[#202c33]'}`}>
                   <span className="size-2 animate-bounce rounded-full bg-[#8696a0] [animation-delay:-220ms]" />
                   <span className="size-2 animate-bounce rounded-full bg-[#8696a0] [animation-delay:-110ms]" />
                   <span className="size-2 animate-bounce rounded-full bg-[#8696a0]" />
@@ -1172,38 +1430,24 @@ export default function App() {
           </div>
         </section>
 
-        {/* Emoji Picker */}
         {emojiOpen && (
           <EmojiPicker
             isLight={isLight}
-            onPick={(emoji) => {
-              setDraft((d) => d + emoji);
+            onPick={emoji => {
+              setDraft(d => d + emoji);
               inputRef.current?.focus();
               requestAnimationFrame(resizeInput);
             }}
           />
         )}
 
-        <footer
-          className={`relative grid shrink-0 grid-cols-[minmax(0,1fr)_44px] items-end gap-2 px-2.5 pt-2.5 pb-[calc(max(1rem,env(safe-area-inset-bottom))+0.875rem)] ${
-            isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'
-          }`}
-        >
-          {/* Input menu (three dots in bar) */}
+        {/* Input bar */}
+        <footer className={`relative grid shrink-0 grid-cols-[minmax(0,1fr)_44px] items-end gap-2 px-2.5 pt-2.5 pb-[calc(max(1rem,env(safe-area-inset-bottom))+0.875rem)] ${isLight ? 'bg-[#f0f2f5]' : 'bg-[#202c33]'}`}>
           {inputMenuOpen && (
-            <div
-              className={`absolute bottom-full right-[52px] mb-2 z-50 min-w-[180px] overflow-hidden rounded-2xl border shadow-2xl ${
-                isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'
-              }`}
-            >
+            <div className={`absolute bottom-full right-[52px] mb-2 z-50 min-w-[180px] overflow-hidden rounded-2xl border shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
               <button
-                onClick={() => {
-                  setInputMenuOpen(false);
-                  window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank');
-                }}
-                className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] transition ${
-                  isLight ? 'hover:bg-[#f0f2f5]' : 'hover:bg-[#182229]'
-                }`}
+                onClick={() => { setInputMenuOpen(false); window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank'); }}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] transition ${isLight ? 'hover:bg-[#f0f2f5]' : 'hover:bg-[#182229]'}`}
               >
                 <span className="text-[18px]">📝</span>
                 Send Feedback
@@ -1211,17 +1455,11 @@ export default function App() {
             </div>
           )}
 
-          <div
-            className={`flex min-h-11 min-w-0 items-end gap-1 rounded-[24px] px-2 py-1.5 shadow-inner shadow-black/10 ${
-              isLight ? 'bg-white' : 'bg-[#2a3942]'
-            }`}
-          >
+          <div className={`flex min-h-11 min-w-0 items-end gap-1 rounded-[24px] px-2 py-1.5 shadow-inner shadow-black/10 ${isLight ? 'bg-white' : 'bg-[#2a3942]'}`}>
             <button
-              onClick={() => { setEmojiOpen((v) => !v); setInputMenuOpen(false); }}
+              onClick={() => { setEmojiOpen(v => !v); setInputMenuOpen(false); }}
               className={`grid size-8 shrink-0 place-items-center rounded-full transition ${
-                emojiOpen
-                  ? 'bg-[#00a884] text-white'
-                  : isLight ? 'text-[#54656f] hover:bg-black/5' : 'text-[#aebac1] hover:bg-white/5'
+                emojiOpen ? 'bg-[#00a884] text-white' : isLight ? 'text-[#54656f] hover:bg-black/5' : 'text-[#aebac1] hover:bg-white/5'
               }`}
               aria-label="Emoji"
             >
@@ -1231,25 +1469,18 @@ export default function App() {
             <textarea
               ref={inputRef}
               value={draft}
-              onChange={(event) => {
-                setDraft(event.target.value);
-                requestAnimationFrame(resizeInput);
-              }}
+              onChange={e => { setDraft(e.target.value); requestAnimationFrame(resizeInput); }}
               onKeyDown={handleKeyDown}
               placeholder="Message"
               rows={1}
-              className={`max-h-[118px] min-h-8 min-w-0 flex-1 resize-none self-center bg-transparent py-1.5 text-[16px] leading-[1.35] outline-none ${
-                isLight ? 'text-[#111b21] placeholder:text-[#667781]' : 'text-[#e9edef] placeholder:text-[#8696a0]'
-              }`}
+              className={`max-h-[118px] min-h-8 min-w-0 flex-1 resize-none self-center bg-transparent py-1.5 text-[16px] leading-[1.35] outline-none ${isLight ? 'text-[#111b21] placeholder:text-[#667781]' : 'text-[#e9edef] placeholder:text-[#8696a0]'}`}
               spellCheck
             />
 
             <button
-              onClick={() => { setInputMenuOpen((v) => !v); setEmojiOpen(false); }}
+              onClick={() => { setInputMenuOpen(v => !v); setEmojiOpen(false); }}
               className={`grid size-8 shrink-0 place-items-center rounded-full transition ${
-                inputMenuOpen
-                  ? 'bg-[#00a884] text-white'
-                  : isLight ? 'text-[#54656f] hover:bg-black/5' : 'text-[#aebac1] hover:bg-white/5'
+                inputMenuOpen ? 'bg-[#00a884] text-white' : isLight ? 'text-[#54656f] hover:bg-black/5' : 'text-[#aebac1] hover:bg-white/5'
               }`}
               aria-label="More options"
             >
@@ -1263,9 +1494,7 @@ export default function App() {
             className={`grid size-11 shrink-0 place-items-center rounded-full transition ${
               hasDraft
                 ? 'bg-[#00a884] text-white shadow-[0_2px_10px_rgba(0,168,132,0.35)] active:scale-95'
-                : isLight
-                  ? 'bg-[#d1d7db] text-[#54656f]'
-                  : 'bg-[#2a3942] text-[#aebac1]'
+                : isLight ? 'bg-[#d1d7db] text-[#54656f]' : 'bg-[#2a3942] text-[#aebac1]'
             }`}
             aria-label="Send message"
           >
@@ -1273,7 +1502,6 @@ export default function App() {
           </button>
         </footer>
       </div>
-
 
       {dpExpanded && (
         <div
@@ -1283,11 +1511,11 @@ export default function App() {
           <img
             src={avatarFor(mode, 512)}
             alt={activeMode.name}
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
             className="max-h-[52dvh] max-w-[72vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
           />
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
             className="max-w-[340px] rounded-2xl bg-white/[0.06] px-5 py-4 text-center backdrop-blur-md ring-1 ring-white/10"
           >
             <div className="mb-1 text-[13px] font-semibold uppercase tracking-widest text-white/40">{activeMode.name}</div>
@@ -1298,42 +1526,25 @@ export default function App() {
 
       {gfPromptOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 px-5 backdrop-blur-sm">
-          <div
-            className={`w-full max-w-[330px] rounded-2xl border p-4 shadow-2xl ${
-              isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'
-            }`}
-          >
+          <div className={`w-full max-w-[330px] rounded-2xl border p-4 shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
             <div className="mb-3 text-[17px] font-semibold">Enter password</div>
             <input
               value={gfPassword}
-              onChange={(event) => {
-                setGfPassword(event.target.value);
-                setGfError('');
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void unlockGfMode();
-                if (event.key === 'Escape') setGfPromptOpen(false);
+              onChange={e => { setGfPassword(e.target.value); setGfError(''); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void unlockGfMode();
+                if (e.key === 'Escape') setGfPromptOpen(false);
               }}
               type="password"
               autoFocus
-              className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${
-                isLight
-                  ? 'border-black/10 bg-[#f0f2f5] text-[#111b21]'
-                  : 'border-white/10 bg-[#182229] text-[#e9edef]'
-              }`}
+              className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${isLight ? 'border-black/10 bg-[#f0f2f5] text-[#111b21]' : 'border-white/10 bg-[#182229] text-[#e9edef]'}`}
             />
             {gfError && <div className="mt-2 text-[13px] text-[#ff6b6b]">{gfError}</div>}
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setGfPromptOpen(false)}
-                className={`rounded-full px-4 py-2 text-[14px] ${isLight ? 'text-[#54656f]' : 'text-[#aebac1]'}`}
-              >
+              <button onClick={() => setGfPromptOpen(false)} className={`rounded-full px-4 py-2 text-[14px] ${isLight ? 'text-[#54656f]' : 'text-[#aebac1]'}`}>
                 Cancel
               </button>
-              <button
-                onClick={() => void unlockGfMode()}
-                className="rounded-full bg-[#00a884] px-4 py-2 text-[14px] font-semibold text-white"
-              >
+              <button onClick={() => void unlockGfMode()} className="rounded-full bg-[#00a884] px-4 py-2 text-[14px] font-semibold text-white">
                 Unlock
               </button>
             </div>
@@ -1350,10 +1561,7 @@ export default function App() {
       {closingCountdown !== null && (
         <div className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4">
           <div className="flex items-center gap-3 rounded-2xl bg-black/75 px-5 py-3 shadow-2xl backdrop-blur-md ring-1 ring-white/10">
-            <div
-              className="relative grid size-9 shrink-0 place-items-center"
-              style={{ '--cd': closingCountdown } as React.CSSProperties}
-            >
+            <div className="relative grid size-9 shrink-0 place-items-center">
               <svg className="absolute inset-0 -rotate-90" viewBox="0 0 36 36" fill="none">
                 <circle cx="18" cy="18" r="15" stroke="white" strokeOpacity="0.15" strokeWidth="3" />
                 <circle
@@ -1367,7 +1575,9 @@ export default function App() {
               </svg>
               <span className="text-[13px] font-semibold text-white">{closingCountdown}</span>
             </div>
-            <span className="text-[13px] text-white/80">Closing chat in <span className="font-semibold text-white">{closingCountdown}s</span></span>
+            <span className="text-[13px] text-white/80">
+              Closing chat in <span className="font-semibold text-white">{closingCountdown}s</span>
+            </span>
           </div>
         </div>
       )}
