@@ -399,6 +399,7 @@ export default function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [dpExpanded, setDpExpanded] = useState(false);
+  const [homeDpExpanded, setHomeDpExpanded] = useState<ModeId | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [inputMenuOpen, setInputMenuOpen] = useState(false);
   const [screen, setScreen] = useState<'contacts' | 'chat'>('contacts');
@@ -726,24 +727,25 @@ export default function App() {
                 >
                   {isLight ? <Moon className="size-5" strokeWidth={2.1} /> : <Sun className="size-5" strokeWidth={2.1} />}
                 </button>
-                {/* Zoom picker */}
-                <div className="flex items-center gap-0.5 ml-0.5">
+                {/* Zoom picker - pill buttons */}
+                <div className="flex items-center gap-1 ml-1 rounded-full px-1 py-1 bg-white/10">
                   <button
                     onClick={() => { const i = ZOOM_LEVELS.indexOf(zoom); if (i > 0) setZoom(ZOOM_LEVELS[i - 1]); }}
                     disabled={zoom === ZOOM_LEVELS[0]}
-                    className="grid size-8 place-items-center rounded-full text-white/80 transition hover:bg-white/10 disabled:opacity-30 text-[18px] font-light"
+                    className="grid size-7 place-items-center rounded-full text-white/90 transition hover:bg-white/20 disabled:opacity-30 text-[16px] font-medium"
                     aria-label="Zoom out"
                   >−</button>
-                  <span className="min-w-[38px] text-center text-[12px] font-semibold text-white/80 tabular-nums">{zoom}%</span>
+                  <span className="min-w-[38px] text-center text-[12px] font-semibold text-white/90 tabular-nums">{zoom}%</span>
                   <button
                     onClick={() => { const i = ZOOM_LEVELS.indexOf(zoom); if (i < ZOOM_LEVELS.length - 1) setZoom(ZOOM_LEVELS[i + 1]); }}
                     disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
-                    className="grid size-8 place-items-center rounded-full text-white/80 transition hover:bg-white/10 disabled:opacity-30 text-[18px] font-light"
+                    className="grid size-7 place-items-center rounded-full text-white/90 transition hover:bg-white/20 disabled:opacity-30 text-[16px] font-medium"
                     aria-label="Zoom in"
                   >+</button>
                 </div>
               </div>
             </div>
+            <div className="mb-1" />
 
             {/* Status line */}
             <div
@@ -799,7 +801,8 @@ export default function App() {
                     <img
                       src={avatarFor(id, 56)}
                       alt={cfg.name}
-                      className="size-14 rounded-full object-cover"
+                      onClick={(e) => { e.stopPropagation(); setHomeDpExpanded(id); }}
+                      className="size-14 rounded-full object-cover cursor-pointer transition hover:opacity-90 active:scale-95"
                     />
                     {isLocked && (
                       <div className="absolute -bottom-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full bg-[#ff6b6b] shadow">
@@ -837,41 +840,62 @@ export default function App() {
               <Users className="mx-auto mb-2 size-8 opacity-30" />
               4 contacts
             </div>
+          </div>
 
-            {/* Footer */}
-            <div className={`pb-8 pt-2 text-center text-[12px] ${isLight ? 'text-[#8696a0]' : 'text-[#667781]'}`}>
-              <div className="flex justify-center gap-2.5 mb-4">
-                <a
-                  href="https://enait-portfolio2.vercel.app/#portfolio"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
-                    isLight
-                      ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10'
-                      : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
-                  }`}
-                >
-                  My Projects
-                </a>
-                <button
-                  onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank')}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
-                    isLight
-                      ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10'
-                      : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
-                  }`}
-                >
-                  Feedback
-                </button>
-              </div>
-              &copy; Made by Md Enaitul Hoque | 2026
+          {/* Pinned Footer */}
+          <div className={`shrink-0 border-t px-4 py-4 text-center text-[12px] ${isLight ? 'border-black/[0.06] bg-[#f0f2f5] text-[#8696a0]' : 'border-white/[0.06] bg-[#0b141a] text-[#667781]'}`}>
+            <div className="flex justify-center gap-2.5 mb-3">
+              <a
+                href="https://enait-portfolio2.vercel.app/#portfolio"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
+                  isLight
+                    ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10'
+                    : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
+                }`}
+              >
+                My Projects
+              </a>
+              <button
+                onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank')}
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
+                  isLight
+                    ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10'
+                    : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
+                }`}
+              >
+                Feedback
+              </button>
             </div>
+            &copy; Made by Md Enaitul Hoque | 2026
           </div>
         </div>
 
         {toast && (
           <div className="fixed bottom-20 left-1/2 z-50 max-w-[min(88vw,360px)] -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-center text-[13px] text-white shadow-xl backdrop-blur">
             {toast}
+          </div>
+        )}
+
+        {homeDpExpanded && (
+          <div
+            onClick={() => setHomeDpExpanded(null)}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/85 px-6 backdrop-blur-sm"
+          >
+            <img
+              src={avatarFor(homeDpExpanded, 512)}
+              alt={MODES[homeDpExpanded].name}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-[52dvh] max-w-[72vw] rounded-2xl object-contain shadow-2xl ring-1 ring-white/10"
+            />
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-[340px] rounded-2xl bg-white/[0.06] px-5 py-4 text-center backdrop-blur-md ring-1 ring-white/10"
+            >
+              <div className="mb-1 text-[13px] font-semibold uppercase tracking-widest text-white/40">{MODES[homeDpExpanded].name}</div>
+              <p className="text-[15px] leading-[1.6] text-white/85">{MODE_INTROS[homeDpExpanded]}</p>
+            </div>
           </div>
         )}
 

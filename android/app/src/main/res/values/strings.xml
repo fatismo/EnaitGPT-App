@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EnaitGPT</string>
+    <string name="title_activity_main">EnaitGPT</string>
+    <string name="package_name">com.enaitul.enaitgpt</string>
+    <string name="custom_url_scheme">com.enaitul.enaitgpt</string>
+</resources>
