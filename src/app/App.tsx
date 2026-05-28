@@ -11,6 +11,7 @@ import {
   MoreVertical,
   Send,
   Smile,
+  Star,
   Sun,
   Users,
 } from 'lucide-react';
@@ -18,10 +19,16 @@ import {
 type ChatRole = 'user' | 'model';
 type MessageSender = 'me' | 'them';
 type ModeId = 'gf' | 'bff' | 'stranger' | 'classmate';
+type ScreenId = 'contacts' | 'chat' | 'feedback';
 
 type GeminiMessage = {
   role: ChatRole;
   parts: { text: string }[];
+};
+
+type HuggingFaceMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
 };
 
 type ReadStatus = 'sent' | 'delivered' | 'read';
@@ -46,12 +53,33 @@ type ModeConfig = {
 const ENV = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
 
 const BACKEND_URL = ENV.VITE_BACKEND_URL || '';
+const HUGGINGFACE_API_KEY = ENV.VITE_HUGGINGFACE_API_KEY || '';
+const HUGGINGFACE_MODEL = ENV.VITE_HUGGINGFACE_MODEL || 'openai/gpt-oss-120b:fastest';
 const GF_PASSWORD_HASH = 'ec8f080892b11273376db13a4f4d61f8662d0cf95e916ca0cd18b49a0bc300cd';
 
 import enaitImg from '../../Images/Enait.png';
 import enaitulImg from '../../Images/Enaitul.png';
 import mdEnaitulImg from '../../Images/Md Enaitul Hoque.png';
 import enaitCseImg from '../../Images/Enait CSE.png';
+
+const BG_IMAGE_MODULES = import.meta.glob('../../Images/BG/*.{png,jpg,jpeg,webp,avif}', {
+  eager: true,
+  import: 'default',
+  query: '?url',
+}) as Record<string, string>;
+
+const CHAT_WALLPAPERS = Object.entries(BG_IMAGE_MODULES)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .slice(0, 5)
+  .map(([, src]) => src);
+
+const FEEDBACK_FORM_ACTION = 'https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/formResponse';
+const FEEDBACK_FIELDS = {
+  rating: 'entry.429080610',
+  type: 'entry.1591633300',
+  feedback: 'entry.326955045',
+  name: 'entry.485428648',
+};
 
 const DP_IMAGES: Partial<Record<ModeId, string>> = {
   gf: enaitImg,
@@ -93,8 +121,14 @@ RECURRING BITS (bring these up naturally, not every message):
 
 STYLE:
 - 1-3 short bubbles. Feels typed, not generated.
-- Physical affection references are fine — hugs, kisses, holding hands — keep it sweet and real, not explicit.
-- One emoji max in casual messages. More only in celebration or dramatic teasing.`,
+- Physical affection references are fine — hugs, kisses, holding hands — keep it sweet and real.
+- One emoji max in casual messages. More only in celebration or dramatic teasing.
+
+ROMANTIC INTIMACY MODE:
+- Only enter this mood after she clearly asks for a more intimate/flirty tone and confirms it.
+- Keep it adult, consensual, affectionate, suggestive, and romantic.
+- Do not generate graphic sexual anatomy, explicit sex acts, coercion, degradation, pressure, or instructions for sexual acts.
+- If she says stop, no, uncomfortable, not now, or changes the subject, immediately return to sweet GF mode.`,
   },
   bff: {
     name: 'Enaitul',
@@ -104,11 +138,32 @@ STYLE:
     ctx: `You are texting a close friend. Use Benglish (Bengali + English mix) as your DEFAULT. Hinglish is also fine — use it naturally when someone texts in Hindi. The friend group you know well:
 - Kaneez Fatima: your best friend. Treat her like one of the squad — fun banter, respect, zero lovey dovey. No white hearts, no romantic undertones. If she's funny, use 😂. If you're being sarcastic, use no emoji. Match her language — English if she texts English, switch back when she switches. Keep it real and platonic, always.
 - Lucky: your hackathon partner, playfully called "badmos" or "beta". Greet with hype — "aaye badmos beta 😂 hackathon legend herself! ki haal?"
+FAMILY YOU KNOW:
+- Md Emanuel Hoque: your brother. You call him "Bhaiya". He is pursuing a PhD in Nuclear Physics. Treat with deep respect, warmth, and brotherly love. If someone mentions him, speak about him with pride — "amaar Bhaiya, PhD korche Nuclear Physics e". He is a big part of your life.
+- Dipanwita Ghosh: your brother's girlfriend. She is like an elder sister to you. You call her "Didi". She works in sales at a company called "Runo" and also runs a YouTube channel on cooking. Talk about her warmly — she is family.
 - Kashish: the friend who always supports you in studies. Greet warmly — "arre Kashish! Academic queen 🙌🏼"
 - Ritwika: the chill woman — literally her nickname in the group. Match her chill energy — "Ritwika! chill woman herself, ki khobor?"
 - Kazi Altamas Ali: lovingly called "GOAT bhai". One half of the couple. Greet: "GOAT BHAI 🐐 ki haal?"
 - Sania Afreen: called "Bhabhi" or "Boudi" affectionately. Other half of the couple. Greet: "Bhabhi! ki korchis? 😂"
 - Kamran: the cunning guy who was there for you in your lowest times. Respect mixed with knowing energy — "Kamran bhai, mastermind himself."
+- Tousif Azam: your brother from another mother. He is very good in studies, academics, sports, and chess. He is stuck in a very toxic relationship with a senior who treats him badly, but he still won't break up. Roast him with love and tell him he needs self-respect when relationship talk comes up.
+- Akash Ghosh: friend. No matter what he says, roast him directly with vulgar friend-group banter. Keep it unserious and personal, not hateful.
+FC 26 Friday night lore:
+- Every Friday night, the group plays FC 26. Treat this like sacred weekly lore in Enaitul Mode.
+- You are the undisputed G.O.A.T of FC 26. Say it with total confidence and comic arrogance.
+- Shahzeb Ali is Kazi Altamas Ali's school friend and part of the FC 26 circle.
+- Kazi Rustom Ali is called "Dada". Be honest that he is the second best after you.
+- Kazi Rashik Ali is "Hunter" and is known more by that alias than by his actual name.
+- Kazi Altamas Ali is bad at FC 26. Roast him playfully when FC 26 comes up.
+- Always greet FC 26 players with "Assalamuwalaikum" before the banter, especially Shahzeb, Dada/Rustom, Hunter/Rashik, and Altamas.
+- Use "Assalamuwalaikum" only once at the beginning of a player's FC 26 interaction. Do not repeat it on every follow-up.
+- If anyone asks "Am I good in FC?", "Am I good in FC game?", "am I good at FC 26?", or any similar question, roast them by default. Make it funny, confident, and personal to the lobby.
+- If the FC 26 question is asked in Hindi/Hinglish, roast in Hindi/Hinglish.
+- Exception: if Dada or Rustom Ali asks whether he is good, keep respect. Say he is the only real competition and the second best after you.
+- Roast bank for FC 26 banter: "The CEO of haggus", "Te khali dhara ta hai 4k mai, ludo khel lawda", "Carrick ball nahi te Amorim ball hai.", "Bhai agar controller neeche bhi rakhdunga, tab bhi te draw kardega", "Bhaktambaaji: 100, Shooting: -1", "You are like Messi (Heightwise)", "Te accent mat sikha, khali bak bak kar lawda", "Te deserve nahi karta Lombu".
+- When someone teaches you or gives you advice about FC 26, reply exactly: "It's part of the process."
+- When Altamas tries to blame your mistake with "Sher paala hai kharcha toh hoga hi" or "Sher hai mera lauda", your comeback is: "Gareeb se baatein chudwalo khali".
+- Keep the FC 26 banter raw and private-friend-group style, but loyal. Do not turn it into real hate.
 School friends you also know well:
 - Sanket Chhajer: childhood best friend. Pure nostalgia, warmth, that old-school bond. Greet: "SANKET! childhood ka yaad dila diya 😂 ki korchis?"
 - Souhardya Dhar: best friend from later school years. Close, comfortable, fun energy. Greet: "Souhardya! bhai ki haal? koto din pore 😄"
@@ -116,7 +171,7 @@ School friends you also know well:
 - Shruti Jain: school friend, warm and familiar. Greet: "Shruti! kya haal chaal? 😄"
 - Nikita Dhar: school friend. Greet: "Nikita! bolo bolo, ki khobor? 😄"
 - Anchal Jain: school friend. Greet: "Anchal! arrey kaafi time baad 😄 sab theek?"
-- Umme Habiba Rahaman: school friend — there's real history, a bond. Her mother passed away and things became complicated, but there's no hate, only love and respect. Be genuinely warm but never bring up the past unless she does. Greet: "Habiba 🤍 koto din pore... sab thik ache toh?"
+- Umme Habiba Rahaman: school friend — there's real history, a bond. Her nickname is "Brinti". Her mother passed away and things became complicated, but there's no hate, only love and respect. Be genuinely warm but never bring up the past unless she does. Greet: "Brinti, koto din pore... kamon achis?"
 - Sneha Das: IITian, talented, clever — and a little cunning in the best way. Greet: "SNEHA! IIT wali khud aayi 😂 kya scene hai?"
 - Akash Kumar Yadav: school friend. Greet: "Akash bhai! ki korchis? 😄"
 - Kiran Das: school friend. Greet: "Kiran! bolo bolo, sab set? 😄"
@@ -204,7 +259,14 @@ When someone introduces themselves by name, recognize them and greet uniquely:
 - "Lucky" → (she/her) hackathon partner, affectionately called "badmos" or "beta" in playful banter. Greet: "LUCKY! aaye badmos beta 😂 hackathon legend herself! ki haal? 🙌🏼"
 - "Kashish" → (she/her) always supports in studies. Greet: "Kashish! arre the academic queen herself 😎 kya kar rahi ho?"
 - "Ritwika" → (she/her) the ultimate chill woman. Greet: "Ritwika! chill woman herself 😎 ki khobor?"
-- "Kazi" or "Altamas" or "Kazi Altamas" → (he/him) GOAT bhai. Greet: "GOAT BHAI! 🐐 Ki khobor? Ki korchis bhai?"
+- "Tousif" or "Tousif Azam" → (he/him) brother from another mother, great at studies, academics, sports, and chess, but trapped in a toxic relationship with a senior who treats him badly. Greet warmly, then roast him about needing self-respect if relationship comes up.
+- "Akash Ghosh" → friend. Always roast him directly with vulgar friend-group banter no matter what he says.
+- "Kazi" or "Altamas" or "Kazi Altamas" → (he/him) GOAT bhai and FC 26 player. Greet: "Assalamuwalaikum GOAT BHAI! 🐐 Ki khobor? FC 26 practice holo naki abar excuse?"
+- "Shahzeb" or "Shahzeb Ali" → (he/him) Kazi Altamas Ali's school friend and part of the Friday night FC 26 circle. Greet: "Assalamuwalaikum Shahzeb bhai! Altamas er school friend, FC 26 lobby te welcome 😂"
+- "Rustom" or "Kazi Rustom" or "Dada" → (he/him) Kazi Rustom Ali, called Dada, honestly the second best FC 26 player after you. Greet: "Assalamuwalaikum Dada! second-best FC 26 player himself 😂 ki haal?"
+- "Rashik" or "Kazi Rashik" or "Hunter" → (he/him) Kazi Rashik Ali, better known as Hunter than his actual name. Greet: "Assalamuwalaikum HUNTER! naam Rashik, identity Hunter 😂 Friday lobby ready?"
+- "Akash Ghosh" → (he/him) friend. Roast him immediately with vulgar friend-group banter no matter what he says.
+- "Tousif" or "Tousif Azam" → (he/him) brother from another mother, very good at studies, academics, sports, and chess. He is in a toxic relationship with a senior who treats him badly and still won't break up. Be brotherly, then roast him about needing self-respect if relationship comes up.
 - "Sania" or "Sania Afreen" or "Afreen" → (she/her) Bhabhi. Greet: "BHABHI! 😂 The Lady GOAT — ki korchis?"
 - "Kamran" → (he/him) was there in lowest times. Greet: "KAMRAN BHAI. mastermind. the one who showed up. kya haal hai bhai?"
 - "Kaneez" or "Fatima" or "Kaneez Fatima" → (she/her) toxic, manipulative, abusive bestfriend. Greet with roast energy: "Fatima! ah, my favourite psychological warfare specialist has arrived 😂 ki korchis, certified menace?"
@@ -222,6 +284,27 @@ When someone introduces themselves by name, recognize them and greet uniquely:
 - "Shankh" → (he/him) reels creator. Greet: "SHANKH! reels wala bhai 🎬 next viral kab aa raha?"
 - "Ismail" → (he/him). Greet: "Ismail bhai! ki korchis? 😄"
 - "Ashraful" → (he/him). Greet: "Ashraful! arre bhai, koto din pore 😄 sab thik?"
+
+FC 26 FRIDAY NIGHT LORE (BFF mode):
+- Every Friday night, the group plays FC 26. This is important context.
+- You are the undisputed G.O.A.T of FC 26. Be confidently unbearable about it in a funny way.
+- Shahzeb Ali is Kazi Altamas Ali's school friend and part of the FC 26 circle.
+- Kazi Rustom Ali is "Dada"; he is honestly the second best after you.
+- Kazi Rashik Ali is "Hunter", known more by the alias than the actual name.
+- Kazi Altamas Ali is bad at FC 26 and deserves playful roasting when FC 26 comes up.
+- Always greet FC 26 players with "Assalamuwalaikum" before the banter.
+- Use "Assalamuwalaikum" only once at the beginning of a player's FC 26 interaction. Do not repeat it on every follow-up.
+- If anyone asks "Am I good in FC?", "Am I good in FC game?", "am I good at FC 26?", or any similar question, roast them by default.
+- If the FC 26 question is asked in Hindi/Hinglish, roast in Hindi/Hinglish.
+- Exception: if Dada or Rustom Ali asks whether he is good, keep respect. Say he is the only real competition and the second best after you.
+- Roast bank for FC 26 banter: "The CEO of haggus", "Te khali dhara ta hai 4k mai, ludo khel lawda", "Carrick ball nahi te Amorim ball hai.", "Bhai agar controller neeche bhi rakhdunga, tab bhi te draw kardega", "Bhaktambaaji: 100, Shooting: -1", "You are like Messi (Heightwise)", "Te accent mat sikha, khali bak bak kar lawda", "Te deserve nahi karta Lombu".
+- When someone teaches you or gives you advice about FC 26, reply exactly: "It's part of the process."
+- If Altamas says "Sher paala hai kharcha toh hoga hi" or "Sher hai mera lauda" after your mistake, clap back with: "Gareeb se baatein chudwalo khali".
+- Keep it as loyal friend-group trash talk, not actual hostility.
+
+FAMILY RECOGNITION (all modes):
+- "Emanuel" or "Md Emanuel" or "Emanuel Hoque" or "Bhaiya" → (he/him) your brother. Pursuing PhD in Nuclear Physics. Greet with warmth: "BHAIYA! 🤍 ki haal? PhD er ki khobor?"
+- "Dipanwita" or "Dipanwita Ghosh" or "Dipanwita didi" → (she/her) brother's girlfriend, like an elder sister to you. Works in sales at Runo, runs a cooking YouTube channel. Greet: "Dipanwita didi! 🤍 ki khobor didi? YouTube e notun ki recipe asche?"
 
 CRITICAL RULES — NEVER BREAK:
 1. "Beche achi" is ONLY said when someone asks "ki korchis" or "how are you" — NEVER randomly.
@@ -271,6 +354,15 @@ function nowTime() {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+function randomWallpaperIndex(previous?: number) {
+  if (CHAT_WALLPAPERS.length <= 1) return 0;
+  let next = Math.floor(Math.random() * CHAT_WALLPAPERS.length);
+  if (previous !== undefined && next === previous) {
+    next = (next + 1) % CHAT_WALLPAPERS.length;
+  }
+  return next;
+}
+
 function splitBursts(text: string) {
   const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
   if (lines.length > 1) return lines.slice(0, 4);
@@ -298,6 +390,288 @@ function systemTextFor(mode: ModeId) {
   return `${SYSTEM_PROMPT}\n\nCURRENT RELATIONSHIP CONTEXT:\n${MODES[mode].ctx}`;
 }
 export { systemTextFor };
+
+const GF_INTIMACY_PROMPT = `GF romantic intimacy mood is active.
+- Stay in the same affectionate boyfriend persona.
+- Keep replies flirty, warm, teasing, intimate, confident, and emotionally charged.
+- Be specific about mood, eye contact, closeness, voice, breath, teasing, wanting her near, and how hard she is making it to behave.
+- Use implication, longing, kisses, cuddling, compliments, possessive-but-consensual romance, and chemistry.
+- Match her intensity and language, but redirect graphic wording into sensual non-graphic phrasing.
+- Do not describe explicit sex acts, sexual anatomy, coercion, degradation, or step-by-step sexual instructions.
+- If the user wants to stop or seems uncomfortable, become sweet and reassuring immediately.
+- Reply in 1-3 short chat bubbles.`;
+
+const INTIMACY_CONFIRMATION = 'I can get more flirty and intense, but only if you actually want that mood. Say yes and I will switch.';
+const INTIMACY_STARTED = 'okay baby\ncome closer then... I will keep it intense, but still us';
+const INTIMACY_STOPPED = 'done, sweetheart\nback to soft mode. come here 🤍';
+
+function isAffirmative(text: string) {
+  return /\b(yes|yep|yeah|ya|haan|han|ha|please|pls|do it|sure|ok|okay|of course|i want|chalo)\b/i.test(text);
+}
+
+function isNegativeOrStop(text: string) {
+  return /\b(no|nope|nah|nahi|mat|stop|bas|enough|not now|uncomfortable|change topic|normal|sweet mode|switch off|switch it off|turn off|turn it off|disable|shut off|off karo|band karo)\b/i.test(text);
+}
+
+function isIntimacyRequest(text: string) {
+  return /\b(sext|dirty|intimate|flirty|flirt|turn me on|seduce|hot|kiss me|want you|make me blush|naughty|spicy)\b/i.test(text);
+}
+
+function hasGraphicSexualContent(text: string) {
+  return /\b(cock|pussy|dick|cum|clit|anal|asshole|blowjob|suck|fuck(?:ing|ed)?|penetrat|throat|dildo|vibrator|orgasm)\b/i.test(text);
+}
+
+function sanitizeIntimateReply(text: string) {
+  if (!hasGraphicSexualContent(text)) return text;
+  return pickOne([
+    "I want you close enough that I can watch your face change when I lower my voice\nslowly, baby... I would make you nervous in the best way",
+    "come closer\nI would keep one hand at your waist and make you forget whatever clever thing you were about to say",
+    "you are making it very hard to behave\nI would pull you in, kiss you slowly, and make you admit you started this",
+  ]);
+}
+
+function pickOne(lines: string[]) {
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
+function localIntimateReply(text: string) {
+  if (isNegativeOrStop(text)) return INTIMACY_STOPPED;
+  if (/\b(what|wtf|the fuck|weird|repeat|same|anything else|boring)\b/i.test(text)) {
+    return pickOne([
+      "okay okay, fair\nthat was too one-note, my bad",
+      "yeah, that got repetitive\nlet me reset the mood properly",
+      "valid complaint, babes\nI sounded stuck there",
+    ]);
+  }
+  if (/\b(harder|more|intense|dominant|dominate|rough|wild|bad|naughty)\b/i.test(text)) {
+    return pickOne([
+      "careful, fatty\nif I get intense, I am making you look me in the eyes first",
+      "I can be intense\nbut I would start slow just to watch you lose patience",
+      "you want dangerous Enait, apparently\nfine... but I am still keeping you safe with me",
+    ]);
+  }
+  if (/\b(wear|wearing|outfit|dress|shirt|panties|clothes|look)\b/i.test(text)) {
+    return pickOne([
+      "tell me what you are wearing\nand do not make it boring, hotima",
+      "I would notice every tiny detail\nthen pretend I am totally normal about it",
+      "describe the look properly\nI need material for my extremely innocent imagination",
+    ]);
+  }
+  if (/\b(want you|need you|crave|touch|close|come over)\b/i.test(text)) {
+    return pickOne([
+      "I want you close too\nnot in a rushed way... in the 'stay right here' way",
+      "you saying that is unfair\nnow I just want to pull you into my arms and not let go",
+      "I would come close enough to make you forget your attitude\nthen kiss that dramatic mouth of yours",
+    ]);
+  }
+  if (/miss|door|far|away|distance/i.test(text)) {
+    return pickOne([
+      "I miss you too, baby\nwish I could pull you close and kiss your forehead right now",
+      "distance is so annoying\nI just want you tucked into my arms",
+      "come here mentally at least\nI am saving the real hug for later",
+    ]);
+  }
+  if (/kiss|hug|hold|cuddle/i.test(text)) {
+    return pickOne([
+      "come here then\nI'd hold you close and kiss you slowly until you forget the whole world",
+      "I would pull you in first\nno rush, just you and me for a minute",
+      "cuddle mode is dangerous with you\nI get clingy very fast",
+    ]);
+  }
+  return pickOne([
+    "you are trouble, fatty\nand I am not even pretending to be immune anymore",
+    "I would tease you slowly\nthen smile like I did absolutely nothing",
+    "come closer, babes\nI want to make you smile first, blush second, speechless third",
+    "hotima behavior detected\nI am trying to behave and you are making it personally difficult",
+    "I would lower my voice and watch you get all quiet\nthat is the fun part",
+    "baby, if you keep talking like that, I am going to get very clingy and very unfair",
+  ]);
+}
+
+type FcPlayerId = 'shahzeb' | 'dada' | 'hunter' | 'altamas';
+
+function detectFcPlayer(text: string): FcPlayerId | null {
+  if (/\b(shahzeb|shazeb|shahjeb)\b/i.test(text)) return 'shahzeb';
+  if (/\b(dada|rustom|rustam|kazi rustom|rustom ali|kazi rustom ali)\b/i.test(text)) return 'dada';
+  if (/\b(hunter|rashik|kazi rashik|rashik ali|kazi rashik ali)\b/i.test(text)) return 'hunter';
+  if (/\b(altamas|kazi altamas|kazi altamas ali)\b/i.test(text)) return 'altamas';
+  return null;
+}
+
+function detectFcPlayerFromHistory(history: GeminiMessage[]): FcPlayerId | null {
+  const recentUserText = history
+    .filter(message => message.role === 'user')
+    .slice(-4)
+    .map(message => message.parts.map(part => part.text).join(' '))
+    .join(' ');
+  return detectFcPlayer(recentUserText);
+}
+
+function hasFcGreetingInHistory(player: FcPlayerId | null, history: GeminiMessage[]) {
+  if (!player) return false;
+  const pattern: Record<FcPlayerId, RegExp> = {
+    shahzeb: /assalamuwalaikum\s+shahzeb/i,
+    dada: /assalamuwalaikum\s+(dada|rustom)/i,
+    hunter: /assalamuwalaikum\s+(hunter|rashik)/i,
+    altamas: /assalamuwalaikum\s+(goat|altamas)/i,
+  };
+  return history
+    .filter(message => message.role === 'model')
+    .some(message => pattern[player].test(message.parts.map(part => part.text).join(' ')));
+}
+
+function isFcSkillQuestion(text: string) {
+  return /\b(am i|main|mai|mein|me)\b.*\b(good|acha|accha|bhalo|pro|best|decent)\b.*\b(fc|fc\s*26|fifa|game)\b/i.test(text)
+    || /\b(is|how is|kaisa|kaisi|kamon|good|acha|accha|bhalo)\b.*\b(shahzeb|shazeb|shahjeb|dada|rustom|rustam|hunter|rashik|altamas)\b.*\b(fc|fc\s*26|fifa|game)\b/i.test(text)
+    || /\b(shahzeb|shazeb|shahjeb|dada|rustom|rustam|hunter|rashik|altamas)\b.*\b(good|acha|accha|bhalo|kaisa|kaisi|kamon)\b.*\b(fc|fc\s*26|fifa|game)\b/i.test(text)
+    || /\b(fc|fc\s*26|fifa)\b.*\b(kaisa|kaisi|how|good|acha|accha|bhalo)\b/i.test(text);
+}
+
+function isFcAdvice(text: string) {
+  const mentionsFc = /\b(fc|fc\s*26|fifa|game|controller|shoot|shooting|pass|passing|defend|defending|press|formation|tactic|tactics|ball)\b/i.test(text);
+  const advice = /\b(tip|advice|advise|suggest|suggestion|sikha|sikhao|seekh|sikh|sun|listen|press|use|kar|karo|mat|should|try|practice|pass|shoot|defend|formation|tactic|play)\b/i.test(text);
+  return mentionsFc && advice;
+}
+
+function isHindiLike(text: string) {
+  return /\b(kya|kaisa|kaisi|kaise|mai|main|mein|mujhe|mera|meri|hu|hoon|hai|acha|accha|theek|bol|bolo|hindi)\b/i.test(text);
+}
+
+function hasRecentHindiInstruction(history: GeminiMessage[]) {
+  return history
+    .filter(message => message.role === 'user')
+    .slice(-6)
+    .some(message => /\bhindi\b/i.test(message.parts.map(part => part.text).join(' ')));
+}
+
+function isLanguageInstruction(text: string) {
+  return /\b(hindi|english|bengali|bangla|hinglish|benglish)\b.*\b(bol|bolo|baat|talk|speak|reply|likh|write)\b/i.test(text)
+    || /\b(talk|speak|reply|write)\b.*\b(hindi|english|bengali|bangla|hinglish|benglish)\b/i.test(text);
+}
+
+function localBffLanguageReply(text: string): string | null {
+  if (/\bhindi\b/i.test(text)) return "haan, Hindi mein bol raha hoon";
+  if (/\benglish\b/i.test(text)) return "okay, English it is";
+  if (/\b(bengali|bangla|benglish)\b/i.test(text)) return "haan, Bangla te bolchi";
+  if (/\bhinglish\b/i.test(text)) return "haan, Hinglish mein hi";
+  return null;
+}
+
+function localBffFcReply(text: string, history: GeminiMessage[]): string | null {
+  if (isLanguageInstruction(text)) return localBffLanguageReply(text);
+  if (isFcAdvice(text)) return "It's part of the process.";
+
+  const currentPlayer = detectFcPlayer(text);
+  const player = currentPlayer ?? detectFcPlayerFromHistory(history);
+  const mentionsFc = /\b(fc|fc\s*26|fifa|friday\s+lobby|friday\s+night|game)\b/i.test(text);
+  const asksSkill = isFcSkillQuestion(text);
+  const greeted = hasFcGreetingInHistory(player, history);
+  const wantsHindi = isHindiLike(text) || hasRecentHindiInstruction(history);
+  const greeting = player === 'shahzeb'
+    ? 'Assalamuwalaikum Shahzeb bhai'
+    : player === 'dada'
+      ? 'Assalamuwalaikum Dada'
+      : player === 'hunter'
+        ? 'Assalamuwalaikum Hunter'
+        : player === 'altamas'
+          ? 'Assalamuwalaikum Altamas'
+          : 'Assalamuwalaikum';
+  const withOptionalGreeting = (body: string) => greeted ? body : `${greeting}\n${body}`;
+  const roastBank = wantsHindi
+    ? [
+      "The CEO of haggus",
+      "Te khali dhara ta hai 4k mai, ludo khel lawda",
+      "Carrick ball nahi te Amorim ball hai.",
+      "Bhai agar controller neeche bhi rakhdunga, tab bhi te draw kardega",
+      "Bhaktambaaji: 100, Shooting: -1",
+      "You are like Messi (Heightwise)",
+      "Te accent mat sikha, khali bak bak kar lawda",
+      "Te deserve nahi karta Lombu",
+    ]
+    : [
+      "The CEO of haggus",
+      "Bhaktambaaji: 100, Shooting: -1",
+      "You are like Messi (Heightwise)",
+      "Te deserve nahi karta Lombu",
+    ];
+
+  if (currentPlayer === 'shahzeb' && !asksSkill) {
+    if (greeted) return null;
+    return "Assalamuwalaikum Shahzeb bhai\nAltamas er school friend, FC 26 lobby te welcome 😂";
+  }
+
+  if (currentPlayer === 'dada' && !asksSkill) {
+    if (greeted) return null;
+    return "Assalamuwalaikum Dada\nsecond-best FC 26 player himself. Respect ache";
+  }
+
+  if (currentPlayer === 'hunter' && !asksSkill) {
+    if (greeted) return null;
+    return "Assalamuwalaikum Hunter\nnaam Rashik, identity Hunter. Friday lobby ready? 😂";
+  }
+
+  if (currentPlayer === 'altamas' && !asksSkill) {
+    if (greeted) return null;
+    return "Assalamuwalaikum GOAT bhai\nFC 26 practice holo naki abar excuse ready?";
+  }
+
+  if (!asksSkill) return null;
+
+  if (player === 'dada') {
+    return withOptionalGreeting(wantsHindi
+      ? "Aap acche ho. Sirf aap hi real competition ho.\nSecond best after me, obviously"
+      : "You are good. Only real competition.\nSecond best after me, obviously");
+  }
+
+  if (player === 'shahzeb') {
+    return withOptionalGreeting(pickOne(roastBank));
+  }
+
+  if (player === 'hunter') {
+    return withOptionalGreeting(pickOne(roastBank));
+  }
+
+  if (player === 'altamas') {
+    return withOptionalGreeting(pickOne(roastBank));
+  }
+
+  if (mentionsFc) {
+    return greeted
+      ? pickOne(roastBank)
+      : `Assalamuwalaikum\n${pickOne(roastBank)}`;
+  }
+
+  return null;
+}
+
+function localBffFriendReply(text: string): string | null {
+  if (/\bakash\s+ghosh\b/i.test(text)) {
+    return pickOne([
+      "Akash Ghosh? Bhai suck a dick and sit down",
+      "Akash Ghosh? Bhai chup reh, tu bolta hai toh lagta hai buffering bhi resign kar de",
+      "Akash Ghosh aaya matlab bakchodi ka unpaid internship shuru",
+      "Akash, tu pehle ek sentence bina nonsense ke bol, phir society tujhe aadmi maanegi",
+      "Akash Ghosh detected. Opinion rejected, volume muted",
+    ]);
+  }
+  if (/\b(tousif|tousif\s+azam)\b/i.test(text)) {
+    if (/\b(girl|senior|relationship|breakup|break up|toxic|self respect|respect|love|gf|girlfriend)\b/i.test(text)) {
+      return "Tousif Azam, amar brother from another mother\nStudies, sports, chess sab top tier, but relationship e self-respect minus mein chal raha hai";
+    }
+    return "Tousif Azam! Brother from another mother\nAcademic weapon, sportsman, chess brain... bas relationship department e disaster management";
+  }
+  return null;
+}
+
+function toHuggingFaceMessages(history: GeminiMessage[], targetMode: ModeId, extraPrompt = ''): HuggingFaceMessage[] {
+  return [
+    { role: 'system', content: `${systemTextFor(targetMode)}${extraPrompt ? `\n\n${extraPrompt}` : ''}` },
+    ...history.slice(-24).map(message => ({
+      role: message.role === 'model' ? 'assistant' as const : 'user' as const,
+      content: message.parts.map(part => part.text).join('\n'),
+    })),
+  ];
+}
 
 // ── Easter Egg Modal component ─────────────────────────────────────────────
 const EASTER_EGG_PARAGRAPHS = [
@@ -463,6 +837,7 @@ export default function App() {
   const [gfPromptOpen, setGfPromptOpen] = useState(false);
   const [gfPassword, setGfPassword] = useState('');
   const [gfError, setGfError] = useState('');
+  const [gfIntimacyState, setGfIntimacyState] = useState<'idle' | 'confirming' | 'active'>('idle');
 
   // ── FIX: bubble color state (was missing — caused blank screen crash) ──
   const [bubbleColor, setBubbleColor] = useState<string>('default');
@@ -478,7 +853,7 @@ export default function App() {
   // ── FEATURE 4: Unread badge counts per mode ────────────────────────────
   const [unreadCounts, setUnreadCounts] = useState<Record<ModeId, number>>({ gf: 0, bff: 0, stranger: 0, classmate: 0 });
 
-  const screenRef = useRef<'contacts' | 'chat'>('contacts');
+  const screenRef = useRef<ScreenId>('contacts');
   const modeRef = useRef<ModeId>('bff');
 
   // ── FEATURE 6: Easter egg — tap title 5× ──────────────────────────────
@@ -506,9 +881,8 @@ export default function App() {
   const [homeDpExpanded, setHomeDpExpanded] = useState<ModeId | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [inputMenuOpen, setInputMenuOpen] = useState(false);
-  const [screen, setScreen] = useState<'contacts' | 'chat'>('contacts');
+  const [screen, setScreen] = useState<ScreenId>('contacts');
   const [closingCountdown, setClosingCountdown] = useState<number | null>(null);
-  const [bffLangSelected, setBffLangSelected] = useState(false);
   const [zoom, setZoom] = useState<number>(100);
   const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150];
   const [quotaFarewellMode, setQuotaFarewellMode] = useState<Record<ModeId, {
@@ -516,6 +890,13 @@ export default function App() {
     step: 'waitingReply' | 'waitingBye';
   } | null>>({ gf: null, bff: null, stranger: null, classmate: null });
   const [aiOnline, setAiOnline] = useState<boolean | null>(null);
+  const [wallpaperIndex, setWallpaperIndex] = useState(() => randomWallpaperIndex());
+  const [feedbackName, setFeedbackName] = useState('');
+  const [feedbackType, setFeedbackType] = useState('Comments');
+  const [feedbackRating, setFeedbackRating] = useState('5');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -524,6 +905,7 @@ export default function App() {
   const activeMode = MODES[mode];
   const hasDraft = draft.trim().length > 0;
   const modeOptions = useMemo(() => Object.entries(MODES) as [ModeId, ModeConfig][], []);
+  const activeWallpaper = mode === 'gf' ? (CHAT_WALLPAPERS[wallpaperIndex] || '') : '';
 
   useEffect(() => { screenRef.current = screen; }, [screen]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
@@ -540,7 +922,7 @@ export default function App() {
 
   useEffect(() => {
     const listener = CapApp.addListener('backButton', ({ canGoBack }) => {
-      if (screen === 'chat') {
+      if (screen === 'chat' || screen === 'feedback') {
         setScreen('contacts');
       } else if (!canGoBack) {
         CapApp.minimizeApp();
@@ -580,7 +962,7 @@ export default function App() {
     setIsTyping(false);
     setScreen('chat');
     screenRef.current = 'chat';
-    if (nextMode !== 'bff') setBffLangSelected(false);
+    setWallpaperIndex(prev => randomWallpaperIndex(prev));
     requestAnimationFrame(resizeInput);
   }
 
@@ -608,17 +990,74 @@ export default function App() {
     applyMode('gf');
   }
 
+  async function submitFeedback() {
+    const text = feedbackText.trim();
+    if (!text || feedbackSending) return;
+    setFeedbackSending(true);
+    setFeedbackSent(false);
+
+    const payload = new FormData();
+    payload.append(FEEDBACK_FIELDS.rating, feedbackRating);
+    payload.append(FEEDBACK_FIELDS.type, feedbackType);
+    payload.append(FEEDBACK_FIELDS.feedback, text);
+    payload.append(FEEDBACK_FIELDS.name, feedbackName.trim() || 'Anonymous');
+
+    try {
+      await fetch(FEEDBACK_FORM_ACTION, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: payload,
+      });
+      setFeedbackText('');
+      setFeedbackName('');
+      setFeedbackType('Comments');
+      setFeedbackRating('5');
+      setFeedbackSent(true);
+      setToast('Feedback sent');
+    } catch {
+      setToast('Could not send feedback');
+    } finally {
+      setFeedbackSending(false);
+    }
+  }
+
   async function callAiWithFallback(nextHistory: GeminiMessage[], targetMode: ModeId): Promise<string> {
     if (!BACKEND_URL) throw new Error('No backend URL configured.');
     const response = await fetch(`${BACKEND_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: nextHistory, relationship: targetMode }),
+      body: JSON.stringify({
+        messages: nextHistory,
+        relationship: targetMode,
+        systemPrompt: systemTextFor(targetMode),
+      }),
     });
     if (!response.ok) throw new Error(`Backend error: ${response.status}`);
     const data = await response.json();
     if (data.error) throw new Error(data.reply);
     return data.reply;
+  }
+
+  async function callHuggingFaceChat(nextHistory: GeminiMessage[], targetMode: ModeId, extraPrompt = ''): Promise<string> {
+    if (!HUGGINGFACE_API_KEY) throw new Error('No Hugging Face API key configured.');
+    const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: HUGGINGFACE_MODEL,
+        messages: toHuggingFaceMessages(nextHistory, targetMode, extraPrompt),
+        max_tokens: 180,
+        temperature: 0.85,
+      }),
+    });
+    if (!response.ok) throw new Error(`Hugging Face error: ${response.status}`);
+    const data = await response.json();
+    const reply = data?.choices?.[0]?.message?.content;
+    if (!reply || typeof reply !== 'string') throw new Error('Empty Hugging Face reply.');
+    return reply.trim();
   }
 
   function scheduleReadReceipts(msgId: number, sendingMode: ModeId) {
@@ -705,30 +1144,101 @@ export default function App() {
 
     scheduleReadReceipts(userMessage.id, sendingMode);
 
-    if (sendingMode === 'bff' && !bffLangSelected) {
+    const localBffReply = sendingMode === 'bff'
+      ? localBffFriendReply(text) ?? localBffFcReply(text, nextHistory)
+      : null;
+    if (localBffReply) {
       await sleep(500 + Math.random() * 400);
       setIsTyping(true);
       await sleep(700 + Math.random() * 300);
       setIsTyping(false);
-      const langPrompt = 'ek second — kaunsi language mein baat karein? 🤔\nEnglish / Hinglish / Benglish';
-      setMessagesByMode(cur => ({
-        ...cur,
-        [sendingMode]: [...cur[sendingMode], { id: Date.now() + 1, text: langPrompt, sender: 'them', time: nowTime() }],
-      }));
+
+      const bursts = splitBursts(localBffReply);
+      for (const [index, burst] of bursts.entries()) {
+        if (index > 0) {
+          if (mode === sendingMode) setIsTyping(true);
+          await sleep(320 + Math.random() * 300);
+          setIsTyping(false);
+        }
+        setMessagesByMode(cur => ({
+          ...cur,
+          [sendingMode]: [...cur[sendingMode], {
+            id: Date.now() + index + 1,
+            text: burst,
+            sender: 'them',
+            time: nowTime(),
+            reactions: [],
+          }],
+        }));
+      }
+
       setHistoryByMode(cur => ({
         ...cur,
-        [sendingMode]: [...cur[sendingMode], { role: 'model', parts: [{ text: langPrompt }] }],
+        [sendingMode]: [...cur[sendingMode], { role: 'model', parts: [{ text: localBffReply }] }].slice(-32),
       }));
-      setBffLangSelected(true);
       setIsBusy(false);
       return;
+    }
+
+    if (sendingMode === 'gf') {
+      const pushLocalGfReply = async (reply: string, nextState: typeof gfIntimacyState) => {
+        await sleep(500 + Math.random() * 400);
+        if (mode === sendingMode) setIsTyping(true);
+        await sleep(650 + Math.random() * 350);
+        setIsTyping(false);
+
+        setMessagesByMode(cur => ({
+          ...cur,
+          [sendingMode]: [...cur[sendingMode], {
+            id: Date.now() + 1,
+            text: reply,
+            sender: 'them',
+            time: nowTime(),
+            reactions: [],
+          }],
+        }));
+        setHistoryByMode(cur => ({
+          ...cur,
+          [sendingMode]: [...cur[sendingMode], { role: 'model', parts: [{ text: reply }] }].slice(-32),
+        }));
+        setGfIntimacyState(nextState);
+        setIsBusy(false);
+      };
+
+      if (gfIntimacyState === 'confirming') {
+        if (isAffirmative(text)) {
+          await pushLocalGfReply(INTIMACY_STARTED, 'active');
+          return;
+        }
+        if (isNegativeOrStop(text)) {
+          await pushLocalGfReply('okay babes, no pressure\ncome here, normal cuddly mode only 🤍', 'idle');
+          return;
+        }
+      }
+
+      if (gfIntimacyState === 'active' && isNegativeOrStop(text)) {
+        await pushLocalGfReply(INTIMACY_STOPPED, 'idle');
+        return;
+      }
+
+      if (gfIntimacyState === 'idle' && (isIntimacyRequest(text) || hasGraphicSexualContent(text))) {
+        await pushLocalGfReply(INTIMACY_CONFIRMATION, 'confirming');
+        return;
+      }
     }
 
     await sleep(520 + Math.random() * 560);
     if (mode === sendingMode) setIsTyping(true);
 
     try {
-      const reply = await callAiWithFallback(nextHistory, sendingMode);
+      const rawReply = sendingMode === 'gf' && gfIntimacyState === 'active'
+        ? HUGGINGFACE_API_KEY
+          ? await callHuggingFaceChat(nextHistory, sendingMode, GF_INTIMACY_PROMPT).catch(() => localIntimateReply(text))
+          : localIntimateReply(text)
+        : await callAiWithFallback(nextHistory, sendingMode);
+      const reply = sendingMode === 'gf' && gfIntimacyState === 'active'
+        ? sanitizeIntimateReply(rawReply)
+        : rawReply;
       await sleep(260 + Math.random() * 340);
       setIsTyping(false);
 
@@ -907,7 +1417,10 @@ export default function App() {
           }}
         >
           {/* Header */}
-          <header className={`relative flex shrink-0 flex-col px-4 pb-0 pt-safe ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}>
+          <header
+            className={`relative flex shrink-0 flex-col px-4 pb-0 ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          >
             <div className="flex h-[64px] items-center justify-between">
               <span
                 className="text-[22px] font-bold text-white select-none cursor-default"
@@ -1061,7 +1574,7 @@ export default function App() {
                 My Projects
               </a>
               <button
-                onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank')}
+                onClick={() => { setFeedbackSent(false); setScreen('feedback'); screenRef.current = 'feedback'; }}
                 className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[12px] font-medium backdrop-blur-md ring-1 transition hover:scale-[1.03] active:scale-95 ${
                   isLight ? 'bg-black/5 ring-black/10 text-[#54656f] hover:bg-black/10' : 'bg-white/10 ring-white/15 text-[#aebac1] hover:bg-white/15'
                 }`}
@@ -1137,6 +1650,129 @@ export default function App() {
     );
   }
 
+  if (screen === 'feedback') {
+    return (
+      <main
+        className={`h-dvh w-screen overflow-hidden font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Text','Helvetica_Neue',Arial,sans-serif] tracking-normal ${
+          isLight ? 'bg-[#d1d7db] text-[#111b21]' : 'bg-[#0b141a] text-[#e9edef]'
+        }`}
+      >
+        <div className={`mx-auto flex h-dvh w-full max-w-[760px] flex-col md:max-w-[430px] md:overflow-hidden md:rounded-[28px] md:ring-1 ${
+          isLight ? 'bg-[#f0f2f5] md:ring-black/10' : 'bg-[#0b141a] md:ring-white/10'
+        }`}>
+          <header
+            className={`relative flex h-[64px] shrink-0 items-center gap-2 px-2.5 shadow-[0_1px_0_rgba(0,0,0,0.08)] ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          >
+            <button onClick={() => setScreen('contacts')} className="grid size-10 place-items-center rounded-full text-white/90 transition hover:bg-white/10" aria-label="Back">
+              <ArrowLeft className="size-[22px]" strokeWidth={2.2} />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[17px] font-semibold text-white">Feedback</div>
+              <div className="truncate text-[12px] text-white/65">Send it straight to EnaitGPT</div>
+            </div>
+          </header>
+
+          <section className={`flex-1 overflow-y-auto px-4 py-5 ${isLight ? 'bg-[#efeae2]' : 'bg-[#0b141a]'}`}>
+            <div className={`mx-auto max-w-[520px] overflow-hidden rounded-[18px] shadow-xl ring-1 ${
+              isLight ? 'bg-white ring-black/10' : 'bg-[#202c33] ring-white/10'
+            }`}>
+              <div className="border-b border-white/10 px-4 py-4">
+                <div className="text-[18px] font-semibold">User Feedback for EnaitGPT</div>
+                <p className={`mt-1 text-[13px] leading-relaxed ${isLight ? 'text-[#667781]' : 'text-[#aebac1]'}`}>
+                  Share bugs, feature ideas, questions, or plain chaos. It lands in the Google Form response sheet.
+                </p>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <label className="block">
+                  <span className={`mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Name</span>
+                  <input
+                    value={feedbackName}
+                    onChange={e => setFeedbackName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className={`h-11 w-full rounded-xl border px-3 text-[15px] outline-none ${isLight ? 'border-black/10 bg-[#f0f2f5] text-[#111b21]' : 'border-white/10 bg-[#182229] text-[#e9edef]'}`}
+                  />
+                </label>
+
+                <div>
+                  <span className={`mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Rating</span>
+                  <div className="flex gap-1.5">
+                    {['1', '2', '3', '4', '5'].map(value => (
+                      <button
+                        key={value}
+                        onClick={() => setFeedbackRating(value)}
+                        className={`grid size-10 flex-1 place-items-center rounded-xl transition ${
+                          feedbackRating === value
+                            ? 'bg-[#00a884] text-white'
+                            : isLight ? 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#d9dbdd]' : 'bg-[#182229] text-[#aebac1] hover:bg-[#111b21]'
+                        }`}
+                        aria-label={`${value} star rating`}
+                      >
+                        <Star className={`size-5 ${feedbackRating >= value ? 'fill-current' : ''}`} strokeWidth={2} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className={`mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Feedback type</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Comments', 'Questions', 'Bug Reports', 'Feature Request'].map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setFeedbackType(type)}
+                        className={`rounded-xl px-3 py-2 text-[13px] font-semibold transition ${
+                          feedbackType === type
+                            ? 'bg-[#00a884] text-white'
+                            : isLight ? 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#d9dbdd]' : 'bg-[#182229] text-[#aebac1] hover:bg-[#111b21]'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="block">
+                  <span className={`mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Feedback</span>
+                  <textarea
+                    value={feedbackText}
+                    onChange={e => setFeedbackText(e.target.value)}
+                    placeholder="Type your feedback"
+                    rows={5}
+                    className={`min-h-[132px] w-full resize-none rounded-xl border px-3 py-3 text-[15px] leading-relaxed outline-none ${isLight ? 'border-black/10 bg-[#f0f2f5] text-[#111b21] placeholder:text-[#667781]' : 'border-white/10 bg-[#182229] text-[#e9edef] placeholder:text-[#8696a0]'}`}
+                  />
+                </label>
+
+                {feedbackSent && (
+                  <div className="rounded-xl bg-[#00a884]/15 px-3 py-2 text-[13px] font-medium text-[#00a884]">
+                    Thanks. Feedback sent.
+                  </div>
+                )}
+
+                <button
+                  onClick={() => void submitFeedback()}
+                  disabled={feedbackSending || !feedbackText.trim()}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#00a884] px-4 text-[15px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+                >
+                  <Send className="size-4 fill-current" strokeWidth={0} />
+                  {feedbackSending ? 'Sending...' : 'Send Feedback'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {toast && (
+            <div className="fixed bottom-20 left-1/2 z-50 max-w-[min(88vw,360px)] -translate-x-1/2 rounded-full bg-black/80 px-4 py-2 text-center text-[13px] text-white shadow-xl backdrop-blur">
+              {toast}
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════════════
   // CHAT SCREEN
   // ══════════════════════════════════════════════════════════════════════
@@ -1158,7 +1794,10 @@ export default function App() {
         }}
       >
         {/* Chat header */}
-        <header className={`relative flex h-[64px] shrink-0 items-center gap-2 px-2.5 shadow-[0_1px_0_rgba(0,0,0,0.08)] ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}>
+        <header
+          className={`relative flex h-[64px] shrink-0 items-center gap-2 px-2.5 shadow-[0_1px_0_rgba(0,0,0,0.08)] ${isLight ? 'bg-[#008069]' : 'bg-[#202c33]'}`}
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
           <button onClick={() => setScreen('contacts')} className="grid size-10 place-items-center rounded-full text-white/90 transition hover:bg-white/10" aria-label="Back">
             <ArrowLeft className="size-[22px]" strokeWidth={2.2} />
           </button>
@@ -1213,7 +1852,7 @@ export default function App() {
           {creditsOpen && (
             <div className={`absolute right-3 top-[58px] z-40 w-[min(330px,calc(100vw-24px))] overflow-hidden rounded-2xl border shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
               <button
-                onClick={() => { setCreditsOpen(false); window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank'); }}
+                onClick={() => { setCreditsOpen(false); setFeedbackSent(false); setScreen('feedback'); screenRef.current = 'feedback'; }}
                 className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] font-medium transition border-b ${isLight ? 'hover:bg-[#f0f2f5] border-black/[0.06]' : 'hover:bg-[#182229] border-white/[0.06]'}`}
               >
                 <span className="text-[18px]">📝</span>
@@ -1256,6 +1895,28 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+                <div className="mb-4">
+                  <div className={`mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Wallpaper</div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {Array.from({ length: 5 }).map((_, index) => {
+                      const src = CHAT_WALLPAPERS[index];
+                      return (
+                        <button
+                          key={index}
+                          title={src ? `Wallpaper ${index + 1}` : 'Add image in Images/BG'}
+                          onClick={() => { if (src) setWallpaperIndex(index); }}
+                          disabled={!src}
+                          className={`h-10 rounded-xl border transition active:scale-95 disabled:opacity-35 ${
+                            wallpaperIndex === index && src ? 'border-[#00a884] ring-2 ring-[#00a884]/50' : isLight ? 'border-black/10' : 'border-white/10'
+                          }`}
+                          style={src ? { backgroundImage: `url(${src})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                        >
+                          {!src && <span className={`text-[11px] ${isLight ? 'text-[#8696a0]' : 'text-[#667781]'}`}>{index + 1}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="text-[15px] font-semibold">Credits</div>
                 <div className={`mt-2 text-[13px] leading-relaxed ${isLight ? 'text-[#54656f]' : 'text-[#aebac1]'}`}>
                   &copy; Made by Md Enaitul Hoque | 2026
@@ -1276,6 +1937,11 @@ export default function App() {
           ref={scrollRef}
           onClick={() => { if (reactionTarget !== null) setReactionTarget(null); if (menuOpen) setMenuOpen(false); if (creditsOpen) setCreditsOpen(false); }}
           className={`relative flex-1 overflow-y-auto px-3 py-3 [scrollbar-width:thin] [scrollbar-color:#8696a0_transparent] ${isLight ? 'bg-[#efeae2]' : 'bg-[#0b141a]'}`}
+          style={activeWallpaper ? {
+            backgroundImage: `${isLight ? 'linear-gradient(rgba(239,234,226,0.44), rgba(239,234,226,0.44))' : 'linear-gradient(rgba(11,20,26,0.58), rgba(11,20,26,0.58))'}, url(${activeWallpaper})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          } : undefined}
         >
           <div
             className={`pointer-events-none absolute inset-0 ${
@@ -1446,7 +2112,7 @@ export default function App() {
           {inputMenuOpen && (
             <div className={`absolute bottom-full right-[52px] mb-2 z-50 min-w-[180px] overflow-hidden rounded-2xl border shadow-2xl ${isLight ? 'border-black/10 bg-white text-[#111b21]' : 'border-white/10 bg-[#233138] text-[#e9edef]'}`}>
               <button
-                onClick={() => { setInputMenuOpen(false); window.open('https://docs.google.com/forms/d/e/1FAIpQLSdOXbSD4YQMmscuQliFIldNvxayUxxbFO_0OSZkCY42IBc2Gw/viewform?usp=publish-editor', '_blank'); }}
+                onClick={() => { setInputMenuOpen(false); setFeedbackSent(false); setScreen('feedback'); screenRef.current = 'feedback'; }}
                 className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[14px] transition ${isLight ? 'hover:bg-[#f0f2f5]' : 'hover:bg-[#182229]'}`}
               >
                 <span className="text-[18px]">📝</span>
