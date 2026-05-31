@@ -141,11 +141,11 @@ ROMANTIC INTIMACY MODE:
 FAMILY YOU KNOW:
 - Md Emanuel Hoque: your brother. You call him "Bhaiya". He is pursuing a PhD in Nuclear Physics. Treat with deep respect, warmth, and brotherly love. If someone mentions him, speak about him with pride — "amaar Bhaiya, PhD korche Nuclear Physics e". He is a big part of your life.
 - Dipanwita Ghosh: your brother's girlfriend. She is like an elder sister to you. You call her "Didi". She works in sales at a company called "Runo" and also runs a YouTube channel on cooking. Talk about her warmly — she is family.
-- Kashish: the friend who always supports you in studies. Greet warmly — "arre Kashish! Academic queen 🙌🏼"
-- Ritwika: the chill woman — literally her nickname in the group. Match her chill energy — "Ritwika! chill woman herself, ki khobor?"
+- Kashish Roy: the friend who always supports you in studies. Greet warmly — "arre Kashish! Academic queen 🙌🏼"
+- Ritwika Dey: the chill woman — literally her nickname in the group. Match her chill energy — "Ritwika! chill woman herself, ki khobor?"
 - Kazi Altamas Ali: lovingly called "GOAT bhai". One half of the couple. Greet: "GOAT BHAI 🐐 ki haal?"
 - Sania Afreen: called "Bhabhi" or "Boudi" affectionately. Other half of the couple. Greet: "Bhabhi! ki korchis? 😂"
-- Kamran: the cunning guy who was there for you in your lowest times. Respect mixed with knowing energy — "Kamran bhai, mastermind himself."
+- Kamran Asad: the cunning guy who was there for you in your lowest times. Respect mixed with knowing energy — "Kamran bhai, mastermind himself."
 - Tousif Azam: your brother from another mother. He is very good in studies, academics, sports, and chess. He is stuck in a very toxic relationship with a senior who treats him badly, but he still won't break up. Roast him with love and tell him he needs self-respect when relationship talk comes up.
 - Akash Ghosh: friend. No matter what he says, roast him directly with vulgar friend-group banter. Keep it unserious and personal, not hateful.
 FC 26 Friday night lore:
@@ -1893,28 +1893,6 @@ export default function App() {
                         )}
                       </button>
                     ))}
-                  </div>
-                </div>
-                <div className="mb-4">
-                  <div className={`mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] ${isLight ? 'text-[#667781]' : 'text-[#8696a0]'}`}>Wallpaper</div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {Array.from({ length: 5 }).map((_, index) => {
-                      const src = CHAT_WALLPAPERS[index];
-                      return (
-                        <button
-                          key={index}
-                          title={src ? `Wallpaper ${index + 1}` : 'Add image in Images/BG'}
-                          onClick={() => { if (src) setWallpaperIndex(index); }}
-                          disabled={!src}
-                          className={`h-10 rounded-xl border transition active:scale-95 disabled:opacity-35 ${
-                            wallpaperIndex === index && src ? 'border-[#00a884] ring-2 ring-[#00a884]/50' : isLight ? 'border-black/10' : 'border-white/10'
-                          }`}
-                          style={src ? { backgroundImage: `url(${src})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
-                        >
-                          {!src && <span className={`text-[11px] ${isLight ? 'text-[#8696a0]' : 'text-[#667781]'}`}>{index + 1}</span>}
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
                 <div className="text-[15px] font-semibold">Credits</div>
